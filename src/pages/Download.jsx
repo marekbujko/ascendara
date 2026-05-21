@@ -97,6 +97,7 @@ import {
 const LOCAL_FALLBACK_PATTERNS = {
   fileditch: /https?:\/\/(fileditchfiles\.me|fileditch\.com)\/file\.php\?f=.+/i,
   fileditchfiles: /https?:\/\/(fileditchfiles\.me|fileditch\.com)\/file\.php\?f=.+/i,
+  buzzheavier: /^https?:\/\/(?:[a-z0-9-]+\.)?(?:bzzhr\.to|fafda\.to)\/(?:d\/)?[A-Za-z0-9]+(?:\?.*)?$/i,
 };
 
 // Async validation using API patterns
