@@ -96,7 +96,7 @@ class SteamRIPScraper(BaseScraper):
             
             # Start view count fetcher
             if not skip_views:
-                self._start_view_count_fetcher(cookie if cf_active else None, view_workers, user_agent)
+                self._start_view_count_fetcher(cookie, view_workers, user_agent)
             
             return True
             
@@ -277,7 +277,7 @@ class SteamRIPScraper(BaseScraper):
     # Private helper methods
     
     def _check_cloudflare_protection(self, user_agent=None):
-        """Check if Cloudflare protection is active"""
+        """Check if Cloudflare protection is active on any required endpoint"""
         self.logger.info("Checking if Cloudflare protection is active...")
         
         try:
@@ -288,18 +288,28 @@ class SteamRIPScraper(BaseScraper):
             final_user_agent = user_agent if user_agent else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
             test_scraper.headers.update({"User-Agent": final_user_agent})
             
-            test_url = "https://steamrip.com/wp-json/wp/v2/posts?per_page=1"
-            response = test_scraper.get(test_url, timeout=15)
+            urls_to_check = [
+                ("posts API", "https://steamrip.com/wp-json/wp/v2/posts?per_page=1"),
+                ("admin-ajax", "https://steamrip.com/wp-admin/admin-ajax.php?postviews_id=1&action=tie_postviews"),
+            ]
             
-            if response.status_code == 200:
-                self.logger.info("✓ Cloudflare protection is NOT active - cookie not required")
-                return False
-            elif response.status_code == 403:
-                self.logger.info("✗ Cloudflare protection is active - cookie required")
-                return True
-            else:
-                self.logger.warning(f"Unexpected status code {response.status_code}, assuming CF is active")
-                return True
+            for label, url in urls_to_check:
+                try:
+                    response = test_scraper.get(url, timeout=15)
+                    if response.status_code == 403:
+                        self.logger.info(f"✗ Cloudflare protection is active on {label} - cookie required")
+                        return True
+                    elif response.status_code == 200:
+                        self.logger.info(f"✓ {label}: accessible without cookie")
+                    else:
+                        self.logger.warning(f"Unexpected status {response.status_code} on {label}, assuming CF is active")
+                        return True
+                except Exception as e:
+                    self.logger.warning(f"Error checking {label}: {e}, assuming CF is active")
+                    return True
+            
+            self.logger.info("✓ Cloudflare protection is NOT active on any endpoint - cookie not required")
+            return False
                 
         except Exception as e:
             self.logger.warning(f"Error checking Cloudflare protection: {e}, assuming CF is active")
