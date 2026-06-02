@@ -312,6 +312,20 @@ function registerMiscHandlers() {
     }
   });
 
+  // Get download manager log (last N lines)
+  ipcMain.handle("get-download-log", async (_, lines = 200) => {
+    try {
+      const appDataPath = app.getPath("appData");
+      const logPath = path.join(appDataPath, "Ascendara by tagoWorks", "downloadmanager.log");
+      if (!fs.existsSync(logPath)) return "";
+      const content = await fs.promises.readFile(logPath, "utf-8");
+      const all = content.split("\n");
+      return all.slice(-lines).join("\n");
+    } catch (err) {
+      return `[Error reading log: ${err.message}]`;
+    }
+  });
+
   // Upload support logs
   ipcMain.handle("upload-support-logs", async (_, sessionToken, appToken) => {
     try {

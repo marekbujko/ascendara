@@ -1291,7 +1291,8 @@
       "openFolder": "Open Folder",
       "pauseDownload": "Pause Download",
       "resumeDownload": "Resume Download",
-      "retryDownload": "Retry Download"
+      "retryDownload": "Retry Download",
+      "viewLog": "View Live Log"
     },
     "activeDownloads": "Downloading Games",
     "alreadyReported": "Already Reported",
@@ -1313,6 +1314,8 @@
     "error": "Error",
     "errorReported": "Issue Reported Successfully",
     "errorReportedDescription": "Thank you for helping improve Ascendara. Ascendara developer team will investigate this issue.",
+    "extractionFailedError": "Archive extraction failed. The downloaded archive could not be extracted - the download may be corrupted or incomplete.",
+    "retryExtraction": "Retry Extraction",
     "errors": {
       "killFailed": "Failed to kill download",
       "pauseFailed": "Failed to pause download"
@@ -1326,7 +1329,10 @@
     },
     "kill": "Kill Download",
     "killSuccess": "Download killed and files deleted",
-    "largeFileNotice": "This file is larger than others and is taking longer to extract...",
+    "largeFileNotice": "Writing a large file to disk... this may take a moment.",
+    "lastExtracted": "Last extracted",
+    "logViewerTitle": "Download Manager Log",
+    "noLogContent": "No log content available.",
     "limitedTo": "Limited to",
     "noDownloads": "Well that's relaxing...",
     "noDownloadsMessage": "You're not downloading anything right now, start a download to track its progress here.",

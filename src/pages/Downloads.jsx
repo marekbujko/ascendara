@@ -56,6 +56,8 @@ import {
   ArrowDownToLine,
   Wifi,
   Play,
+  FileText,
+  ScrollText,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -67,6 +69,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSettings } from "@/context/SettingsContext";
 import {
   processNextInQueue,
@@ -1310,6 +1319,42 @@ const DownloadCard = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showLargeFileNotice, setShowLargeFileNotice] = useState(false);
+  const [logDialogOpen, setLogDialogOpen] = useState(false);
+  const [logContent, setLogContent] = useState("");
+  const [logLoading, setLogLoading] = useState(false);
+  const logScrollRef = useRef(null);
+  const logPollRef = useRef(null);
+
+  useEffect(() => {
+    if (!logLoading && logScrollRef.current) {
+      logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight;
+    }
+  }, [logContent, logLoading]);
+
+  useEffect(() => {
+    if (!logDialogOpen) {
+      clearInterval(logPollRef.current);
+      return;
+    }
+    const fetchLog = async () => {
+      try {
+        const content = await window.electron.ipcRenderer.invoke("get-download-log", 200);
+        setLogContent(content);
+      } catch (err) {
+        setLogContent(`Error reading log: ${err.message}`);
+      } finally {
+        setLogLoading(false);
+      }
+    };
+    fetchLog();
+    logPollRef.current = setInterval(fetchLog, 2000);
+    return () => clearInterval(logPollRef.current);
+  }, [logDialogOpen]);
+
+  const handleViewLog = () => {
+    setLogLoading(true);
+    setLogDialogOpen(true);
+  };
   const fileStartTimeRef = useRef(null);
   const trackedFileRef = useRef(null);
   const noticeShownForFileRef = useRef(null);
@@ -1325,10 +1370,10 @@ const DownloadCard = ({
   // Track extraction time per file to show notice for large files
   useEffect(() => {
     const currentFile = downloadingData?.extractionProgress?.currentFile;
-    const isExtracting = downloadingData?.extracting;
+    const _isExtractingLocal = downloadingData?.extracting;
 
     // Reset everything when extraction stops
-    if (!isExtracting) {
+    if (!_isExtractingLocal) {
       setShowLargeFileNotice(false);
       fileStartTimeRef.current = null;
       trackedFileRef.current = null;
@@ -1658,6 +1703,12 @@ const DownloadCard = ({
                     <Pause className="h-4 w-4" />
                     {t("downloads.actions.pauseDownload")}
                   </DropdownMenuItem>
+                  {isExtracting && (
+                    <DropdownMenuItem onClick={() => handleViewLog()} className="gap-2">
+                      <ScrollText className="h-4 w-4" />
+                      {t("downloads.actions.viewLog")}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onClick={() => onKill(game)}
                     className="gap-2 text-red-600 focus:text-red-600"
@@ -1967,13 +2018,24 @@ const DownloadCard = ({
                           {downloadingData.extractionProgress.extractionSpeed}
                         </span>
                       </div>
-                      <p
-                        className="truncate text-sm text-muted-foreground"
-                        title={downloadingData.extractionProgress.currentFile}
-                      >
-                        {downloadingData.extractionProgress.currentFile ||
-                          t("downloads.extractingDescription")}
-                      </p>
+                      {downloadingData.extractionProgress.currentFile ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wider">{t("downloads.lastExtracted")}</span>
+                          <div className="flex items-center gap-1.5 rounded-md bg-muted/70 px-2 py-0.5">
+                            <FileText className="h-3 w-3 text-muted-foreground" />
+                            <span
+                              className="max-w-[180px] truncate text-xs font-medium text-foreground"
+                              title={downloadingData.extractionProgress.currentFile}
+                            >
+                              {downloadingData.extractionProgress.currentFile}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {t("downloads.extractingDescription")}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </>
@@ -2021,6 +2083,29 @@ const DownloadCard = ({
           )}
         </div>
       </div>
+
+      {/* Log Viewer Dialog */}
+      <Dialog open={logDialogOpen} onOpenChange={setLogDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ScrollText className="h-5 w-5" />
+              {t("downloads.logViewerTitle")}
+            </DialogTitle>
+          </DialogHeader>
+          <div ref={logScrollRef} className="h-[60vh] w-full overflow-y-auto rounded-md border bg-muted/30 p-4">
+            {logLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
+                {logContent || t("downloads.noLogContent")}
+              </pre>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

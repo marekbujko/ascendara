@@ -608,7 +608,7 @@ class ChunkedDownloader:
 # Main Downloader Class
 
 
-class RobustDownloader:
+class AscendaraDownloader:
     """
     Main downloader class that orchestrates download, extraction, and verification.
     """
@@ -647,7 +647,7 @@ class RobustDownloader:
             self.game_info['downloadingData']['updating'] = True
             # Update version to the new version being downloaded
             if version:
-                logging.info(f"[RobustDownloader] Updating version from {self.game_info.get('version', 'unknown')} to {version}")
+                logging.info(f"[AscendaraDownloader] Updating version from {self.game_info.get('version', 'unknown')} to {version}")
                 self.game_info['version'] = version
         else:
             self.game_info = {
@@ -741,13 +741,13 @@ class RobustDownloader:
                         
                         if not check_disk_space(self.download_dir, total_needed, "download and extraction"):
                             error_msg = f"Insufficient disk space. Need ~{read_size(total_needed)}"
-                            logging.error(f"[RobustDownloader] {error_msg}")
+                            logging.error(f"[AscendaraDownloader] {error_msg}")
                             handleerror(self.game_info, self.game_info_path, error_msg)
                             if withNotification:
                                 _launch_notification(withNotification, "Download Failed", error_msg)
                             return
                 except Exception as e:
-                    logging.warning(f"[RobustDownloader] Could not parse size for disk check: {e}")
+                    logging.warning(f"[AscendaraDownloader] Could not parse size for disk check: {e}")
             
             # Update state
             self.game_info["downloadingData"]["downloading"] = True
@@ -757,8 +757,8 @@ class RobustDownloader:
             base_name = self._get_filename_from_url(url)
             dest = os.path.join(self.download_dir, base_name)
             
-            logging.info(f"[RobustDownloader] Starting download: {url}")
-            logging.info(f"[RobustDownloader] Destination: {dest}")
+            logging.info(f"[AscendaraDownloader] Starting download: {url}")
+            logging.info(f"[AscendaraDownloader] Destination: {dest}")
             
             # Notification: Download Started
             if withNotification:
@@ -769,7 +769,7 @@ class RobustDownloader:
             success = downloader.download()
             
             if success:
-                logging.info(f"[RobustDownloader] Download completed successfully")
+                logging.info(f"[AscendaraDownloader] Download completed successfully")
                 
                 # Update state
                 self.game_info["downloadingData"]["downloading"] = False
@@ -793,10 +793,10 @@ class RobustDownloader:
             err_str = str(e)
             if any(x in err_str for x in ['SSL: WRONG_VERSION_NUMBER', 'ssl.SSLError', 'WinError 10054', 
                                            'forcibly closed', 'ConnectionResetError']):
-                logging.error(f"[RobustDownloader] Provider blocked error: {e}")
+                logging.error(f"[AscendaraDownloader] Provider blocked error: {e}")
                 handleerror(self.game_info, self.game_info_path, 'provider_blocked_error')
             else:
-                logging.error(f"[RobustDownloader] Download error: {e}")
+                logging.error(f"[AscendaraDownloader] Download error: {e}")
                 handleerror(self.game_info, self.game_info_path, e)
             
             if withNotification:
@@ -814,11 +814,11 @@ class RobustDownloader:
         try:
             # Calculate size of existing game files
             existing_size = get_directory_size(self.download_dir)
-            logging.info(f"[RobustDownloader] Existing game size: {read_size(existing_size)}")
+            logging.info(f"[AscendaraDownloader] Existing game size: {read_size(existing_size)}")
             
             # Check if we have enough space for backup (need space for copy)
             if not check_disk_space(self.download_dir, existing_size, "backup creation"):
-                logging.error(f"[RobustDownloader] Insufficient disk space to create backup")
+                logging.error(f"[AscendaraDownloader] Insufficient disk space to create backup")
                 if self.withNotification:
                     _launch_notification(
                         self.withNotification,
@@ -829,12 +829,12 @@ class RobustDownloader:
             
             # Remove old backup if it exists
             if os.path.exists(backup_dir):
-                logging.info(f"[RobustDownloader] Removing old backup: {backup_dir}")
+                logging.info(f"[AscendaraDownloader] Removing old backup: {backup_dir}")
                 shutil.rmtree(backup_dir, ignore_errors=True)
             
             # Create new backup directory
             os.makedirs(backup_dir, exist_ok=True)
-            logging.info(f"[RobustDownloader] Creating backup for update: {backup_dir}")
+            logging.info(f"[AscendaraDownloader] Creating backup for update: {backup_dir}")
             
             # Backup all files except archives, temp files, and the JSON file
             backup_count = 0
@@ -859,19 +859,19 @@ class RobustDownloader:
                 try:
                     if os.path.isdir(item_path):
                         shutil.copytree(item_path, backup_item_path, dirs_exist_ok=True)
-                        logging.info(f"[RobustDownloader] Backed up directory: {item}")
+                        logging.info(f"[AscendaraDownloader] Backed up directory: {item}")
                     else:
                         shutil.copy2(item_path, backup_item_path)
-                        logging.info(f"[RobustDownloader] Backed up file: {item}")
+                        logging.info(f"[AscendaraDownloader] Backed up file: {item}")
                     backup_count += 1
                 except Exception as e:
-                    logging.warning(f"[RobustDownloader] Could not backup {item}: {e}")
+                    logging.warning(f"[AscendaraDownloader] Could not backup {item}: {e}")
             
-            logging.info(f"[RobustDownloader] Backup complete: {backup_count} items backed up")
+            logging.info(f"[AscendaraDownloader] Backup complete: {backup_count} items backed up")
             return backup_dir
             
         except Exception as e:
-            logging.error(f"[RobustDownloader] Failed to create backup: {e}")
+            logging.error(f"[AscendaraDownloader] Failed to create backup: {e}")
             return None
     
     def _restore_from_backup(self, backup_dir: str) -> bool:
@@ -879,11 +879,11 @@ class RobustDownloader:
         Returns True if successful, False otherwise.
         """
         if not backup_dir or not os.path.exists(backup_dir):
-            logging.error(f"[RobustDownloader] Backup directory not found: {backup_dir}")
+            logging.error(f"[AscendaraDownloader] Backup directory not found: {backup_dir}")
             return False
         
         try:
-            logging.info(f"[RobustDownloader] Restoring from backup: {backup_dir}")
+            logging.info(f"[AscendaraDownloader] Restoring from backup: {backup_dir}")
             
             # Remove failed update files (except JSON and backup)
             for item in os.listdir(self.download_dir):
@@ -897,7 +897,7 @@ class RobustDownloader:
                     else:
                         os.remove(item_path)
                 except Exception as e:
-                    logging.warning(f"[RobustDownloader] Could not remove {item}: {e}")
+                    logging.warning(f"[AscendaraDownloader] Could not remove {item}: {e}")
             
             # Restore backed up files
             restore_count = 0
@@ -912,14 +912,14 @@ class RobustDownloader:
                         shutil.copy2(backup_item_path, restore_item_path)
                     restore_count += 1
                 except Exception as e:
-                    logging.error(f"[RobustDownloader] Could not restore {item}: {e}")
+                    logging.error(f"[AscendaraDownloader] Could not restore {item}: {e}")
                     return False
             
-            logging.info(f"[RobustDownloader] Restore complete: {restore_count} items restored")
+            logging.info(f"[AscendaraDownloader] Restore complete: {restore_count} items restored")
             return True
             
         except Exception as e:
-            logging.error(f"[RobustDownloader] Failed to restore from backup: {e}")
+            logging.error(f"[AscendaraDownloader] Failed to restore from backup: {e}")
             return False
     
     def _cleanup_backup(self, backup_dir: str):
@@ -927,14 +927,14 @@ class RobustDownloader:
         if backup_dir and os.path.exists(backup_dir):
             try:
                 shutil.rmtree(backup_dir, ignore_errors=True)
-                logging.info(f"[RobustDownloader] Cleaned up backup: {backup_dir}")
+                logging.info(f"[AscendaraDownloader] Cleaned up backup: {backup_dir}")
             except Exception as e:
-                logging.warning(f"[RobustDownloader] Could not cleanup backup: {e}")
+                logging.warning(f"[AscendaraDownloader] Could not cleanup backup: {e}")
     
     def _fix_file_extension(self, dest: str) -> str:
         """Fix file extension based on detected file type."""
         filetype, hexsig = self.detect_file_type(dest)
-        logging.info(f"[RobustDownloader] Detected file type: {filetype}")
+        logging.info(f"[AscendaraDownloader] Detected file type: {filetype}")
         
         ext_map = {'zip': '.zip', 'rar': '.rar', '7z': '.7z', 'exe': '.exe'}
         correct_ext = ext_map.get(filetype)
@@ -946,7 +946,7 @@ class RobustDownloader:
             else:
                 new_dest = dest + correct_ext
             
-            logging.info(f"[RobustDownloader] Renaming to: {new_dest}")
+            logging.info(f"[AscendaraDownloader] Renaming to: {new_dest}")
             os.rename(dest, new_dest)
             
             if os.path.exists(dest) and dest != new_dest:
@@ -964,7 +964,7 @@ class RobustDownloader:
         from urllib.parse import urlparse, parse_qs
         import re
 
-        logging.info(f"[RobustDownloader] Buzzheavier download: {url}")
+        logging.info(f"[AscendaraDownloader] Buzzheavier download: {url}")
 
         parsed = urlparse(url)
         path_parts = parsed.path.strip('/').split('/')
@@ -1095,6 +1095,8 @@ class RobustDownloader:
         self._extraction_start_time = time.time()
         self._files_extracted_count = 0
         self._last_progress_update = 0  # Track last JSON write time
+        self._speed_window_time = self._extraction_start_time
+        self._speed_window_count = 0
         
         watching_path = os.path.join(self.download_dir, "filemap.ascendara.json")
         watching_data = {}
@@ -1103,9 +1105,9 @@ class RobustDownloader:
         # Determine archives to process
         if archive_path and os.path.exists(archive_path):
             archives_to_process = [archive_path]
-            logging.info(f"[RobustDownloader] Extracting: {archive_path}")
+            logging.info(f"[AscendaraDownloader] Extracting: {archive_path}")
         else:
-            logging.info(f"[RobustDownloader] Scanning for archives in: {self.download_dir}")
+            logging.info(f"[AscendaraDownloader] Scanning for archives in: {self.download_dir}")
             archives_to_process = []
             for root, _, files in os.walk(self.download_dir):
                 for file in files:
@@ -1134,7 +1136,7 @@ class RobustDownloader:
                                     if not info.filename.endswith('.url') and '_CommonRedist' not in info.filename and not info.filename.endswith('/'):
                                         total_files_to_extract += 1
                         except Exception as e:
-                            logging.warning(f"[RobustDownloader] Could not count RAR files with library: {e}")
+                            logging.warning(f"[AscendaraDownloader] Could not count RAR files with library: {e}")
                     else:
                         import shutil as _shutil
                         _unrar = _shutil.which('unrar') or _shutil.which('unrar-free')
@@ -1147,13 +1149,15 @@ class RobustDownloader:
                                     if not _fname.endswith('.url') and '_CommonRedist' not in _fname and not _fname.endswith('/'):
                                         total_files_to_extract += 1
             except Exception as e:
-                logging.warning(f"[RobustDownloader] Could not count files in {arch_path}: {e}")
+                logging.warning(f"[AscendaraDownloader] Could not count files in {arch_path}: {e}")
         
-        logging.info(f"[RobustDownloader] Total files to extract: {total_files_to_extract}")
+        logging.info(f"[AscendaraDownloader] Total files to extract: {total_files_to_extract}")
         self._total_files_to_extract = total_files_to_extract
         self._update_extraction_progress("Preparing...", 0, total_files_to_extract, force=True)
         
         processed_archives = set()
+        any_extraction_succeeded = False
+        extraction_errors = []
         
         while archives_to_process:
             current_archive = archives_to_process.pop(0)
@@ -1163,23 +1167,35 @@ class RobustDownloader:
             
             processed_archives.add(current_archive)
             ext = os.path.splitext(current_archive)[1].lower()
-            logging.info(f"[RobustDownloader] Extracting: {current_archive}")
+            logging.info(f"[AscendaraDownloader] Extracting: {current_archive}")
+            
+            # Nested archives extract to their own parent dir to preserve
+            # directory structure; top-level archives extract to download_dir
+            _archive_parent = os.path.dirname(os.path.normpath(current_archive))
+            if os.path.normpath(_archive_parent) == os.path.normpath(self.download_dir):
+                _extract_to = self.download_dir
+            else:
+                _extract_to = _archive_parent
+                os.makedirs(_extract_to, exist_ok=True)
             
             try:
                 if ext == '.zip':
-                    self._extract_zip(current_archive, watching_data)
+                    self._extract_zip(current_archive, watching_data, _extract_to)
                 elif ext == '.rar':
-                    self._extract_rar(current_archive, watching_data)
+                    self._extract_rar(current_archive, watching_data, _extract_to)
+                
+                any_extraction_succeeded = True
                 
                 # Delete archive after extraction
                 try:
                     os.remove(current_archive)
-                    logging.info(f"[RobustDownloader] Deleted archive: {current_archive}")
+                    logging.info(f"[AscendaraDownloader] Deleted archive: {current_archive}")
                 except Exception as e:
-                    logging.warning(f"[RobustDownloader] Could not delete archive: {e}")
+                    logging.warning(f"[AscendaraDownloader] Could not delete archive: {e}")
                 
             except Exception as e:
-                logging.error(f"[RobustDownloader] Extraction failed: {e}")
+                logging.error(f"[AscendaraDownloader] Extraction failed: {e}")
+                extraction_errors.append(str(e))
                 continue
             
             # Scan for new archives
@@ -1194,14 +1210,14 @@ class RobustDownloader:
                             # instead of queuing a doomed extraction that leaves GBs on disk.
                             _mp = re.match(r'^.+\.part(\d+)\.rar$', file, re.IGNORECASE)
                             if _mp and int(_mp.group(1)) != 1:
-                                logging.info(f"[RobustDownloader] Deleting non-first RAR part (content already extracted): {file}")
+                                logging.info(f"[AscendaraDownloader] Deleting non-first RAR part (content already extracted): {file}")
                                 try:
                                     os.remove(new_archive)
                                 except Exception as _e:
-                                    logging.warning(f"[RobustDownloader] Could not delete non-first RAR part: {_e}")
+                                    logging.warning(f"[AscendaraDownloader] Could not delete non-first RAR part: {_e}")
                                 continue
                             archives_to_process.append(new_archive)
-                            logging.info(f"[RobustDownloader] Found nested archive: {new_archive}")
+                            logging.info(f"[AscendaraDownloader] Found nested archive: {new_archive}")
                             
                             # Count files in nested archive and update total
                             try:
@@ -1225,9 +1241,13 @@ class RobustDownloader:
                                 
                                 if nested_file_count > 0:
                                     self._total_files_to_extract += nested_file_count
-                                    logging.info(f"[RobustDownloader] Added {nested_file_count} files from nested archive (new total: {self._total_files_to_extract})")
+                                    logging.info(f"[AscendaraDownloader] Added {nested_file_count} files from nested archive (new total: {self._total_files_to_extract})")
                             except Exception as e:
-                                logging.warning(f"[RobustDownloader] Could not count files in nested archive {new_archive}: {e}")
+                                logging.warning(f"[AscendaraDownloader] Could not count files in nested archive {new_archive}: {e}")
+        
+        # If every archive failed to extract, raise so the caller can handle the error
+        if not any_extraction_succeeded and extraction_errors:
+            raise RuntimeError(f"Extraction failed: {extraction_errors[0]}")
         
         # Force final progress update before flattening
         self._update_extraction_progress("Finalizing...", self._files_extracted_count, self._total_files_to_extract, force=True)
@@ -1275,7 +1295,17 @@ class RobustDownloader:
         """
         current_time = time.time()
         elapsed = current_time - self._extraction_start_time
-        speed = files_extracted / elapsed if elapsed > 0 else 0
+        # Sliding-window speed: rate over the last 10 s instead of all-time average
+        window_elapsed = current_time - self._speed_window_time
+        window_files = files_extracted - self._speed_window_count
+        if window_elapsed >= 10.0:
+            speed = window_files / window_elapsed
+            self._speed_window_time = current_time
+            self._speed_window_count = files_extracted
+        elif window_elapsed > 0:
+            speed = window_files / window_elapsed
+        else:
+            speed = 0
         
         # Cap files_extracted to never exceed total_files
         files_extracted = min(files_extracted, total_files)
@@ -1297,19 +1327,19 @@ class RobustDownloader:
             safe_write_json(self.game_info_path, self.game_info)
             self._last_progress_update = current_time
 
-    def _extract_zip(self, archive_path: str, watching_data: Dict):
+    def _extract_zip(self, archive_path: str, watching_data: Dict, extract_to: str = None):
         """Extract a ZIP file."""
         try:
             with zipfile.ZipFile(archive_path, 'r') as test_zip:
                 test_zip.testzip()
-            logging.info(f"[RobustDownloader] ZIP validation passed")
+            logging.info(f"[AscendaraDownloader] ZIP validation passed")
         except zipfile.BadZipFile as e:
-            logging.error(f"[RobustDownloader] Invalid ZIP: {e}")
+            logging.error(f"[AscendaraDownloader] Invalid ZIP: {e}")
             raise
         
         with zipfile.ZipFile(archive_path, 'r') as zip_ref:
             zip_contents = zip_ref.infolist()
-            logging.info(f"[RobustDownloader] ZIP contains {len(zip_contents)} files")
+            logging.info(f"[AscendaraDownloader] ZIP contains {len(zip_contents)} files")
             
             # Filter members to extract (exclude .url and _CommonRedist)
             members_to_extract = [
@@ -1317,35 +1347,36 @@ class RobustDownloader:
                 if not zip_info.filename.endswith('.url') and '_CommonRedist' not in zip_info.filename
             ]
             
-            logging.info(f"[RobustDownloader] Extracting {len(members_to_extract)} files (filtered from {len(zip_contents)})")
+            logging.info(f"[AscendaraDownloader] Extracting {len(members_to_extract)} files (filtered from {len(zip_contents)})")
             
             # Use extractall() for dramatically faster extraction (10-100x faster than file-by-file)
             try:
-                zip_ref.extractall(self.download_dir, members=members_to_extract, pwd=b'steamrip.com')
-                logging.info(f"[RobustDownloader] Bulk extraction complete")
+                zip_ref.extractall(extract_to or self.download_dir, members=members_to_extract, pwd=b'steamrip.com')
+                logging.info(f"[AscendaraDownloader] Bulk extraction complete")
             except Exception as e:
-                logging.error(f"[RobustDownloader] Bulk extraction failed: {e}")
+                logging.error(f"[AscendaraDownloader] Bulk extraction failed: {e}")
                 raise
             
             # Build watching data and update progress after extraction
             for zip_info in members_to_extract:
                 # Only process actual files, not directories
                 if not zip_info.is_dir():
-                    extracted_path = os.path.join(self.download_dir, zip_info.filename)
+                    _et = extract_to or self.download_dir
+                    extracted_path = os.path.join(_et, zip_info.filename)
                     key = os.path.relpath(extracted_path, self.download_dir)
                     watching_data[key] = {"size": zip_info.file_size}
                     
                     self._files_extracted_count += 1
                     # Cap the count to never exceed total
                     if self._files_extracted_count > self._total_files_to_extract:
-                        logging.warning(f"[RobustDownloader] Extracted count ({self._files_extracted_count}) exceeds total ({self._total_files_to_extract}), capping")
+                        logging.warning(f"[AscendaraDownloader] Extracted count ({self._files_extracted_count}) exceeds total ({self._total_files_to_extract}), capping")
                         self._files_extracted_count = self._total_files_to_extract
                     
                     # Update progress more frequently: first 10 files (every file), then every 50 files, or at completion
                     if self._files_extracted_count <= 10 or self._files_extracted_count % 50 == 0 or self._files_extracted_count == self._total_files_to_extract:
                         self._update_extraction_progress(zip_info.filename, self._files_extracted_count, self._total_files_to_extract)
     
-    def _extract_rar(self, archive_path: str, watching_data: Dict):
+    def _extract_rar(self, archive_path: str, watching_data: Dict, extract_to: str = None):
         """Extract a RAR file using Python unrar library (Windows) or system unrar binary (Linux/macOS)."""
         import threading
         import shutil as _shutil
@@ -1367,15 +1398,19 @@ class RobustDownloader:
             except Exception as _pe:
                 if 'password' in str(_pe).lower() or 'encrypted' in str(_pe).lower():
                     _encrypted = True
-                    logging.info(f"[RobustDownloader] Encrypted RAR detected, falling back to CLI extraction with password")
+                    logging.info(f"[AscendaraDownloader] Encrypted RAR detected, falling back to CLI extraction with password")
                 else:
                     raise
 
             if not _encrypted:
-                logging.info(f"[RobustDownloader] Extracting RAR with Python unrar library: {archive_path}")
-                return self._extract_rar_with_library(archive_path, watching_data)
+                logging.info(f"[AscendaraDownloader] Extracting RAR with Python unrar library: {archive_path}")
+                try:
+                    return self._extract_rar_with_library(archive_path, watching_data, extract_to)
+                except Exception as _lib_err:
+                    logging.warning(f"[AscendaraDownloader] Python library extraction failed ({_lib_err}), falling back to CLI tools")
+                    _encrypted = True  # Signal to use CLI path below
 
-            # Encrypted archive: use CLI tool with password
+            # Encrypted or library-failed archive: use CLI tool with password
             _CREATE_NO_WINDOW = 0x08000000
             # WinRAR/UnRAR is the authoritative RAR5 tool - try it first
             _unrar_paths = [_shutil.which('unrar'), _shutil.which('WinRAR')]
@@ -1412,9 +1447,9 @@ class RobustDownloader:
             _7z_bin = next((p for p in _7z_paths if p and os.path.isfile(p)), None)
             _extraction_success = False
             if _unrar_bin:
-                logging.info(f"[RobustDownloader] Extracting encrypted RAR with unrar CLI: {_unrar_bin}")
+                logging.info(f"[AscendaraDownloader] Extracting encrypted RAR with unrar CLI: {_unrar_bin}")
                 _proc = subprocess.Popen(
-                    [_unrar_bin, 'x', '-y', '-psteamrip.com', archive_path, self.download_dir + '/'],
+                    [_unrar_bin, 'x', '-y', '-psteamrip.com', archive_path, (extract_to or self.download_dir) + '/'],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                     stdin=subprocess.DEVNULL, text=True,
                     creationflags=_CREATE_NO_WINDOW
@@ -1437,12 +1472,12 @@ class RobustDownloader:
                     _extraction_success = True
                 else:
                     _stderr = _proc.stderr.read()
-                    logging.warning(f"[RobustDownloader] unrar failed (exit {_proc.returncode}), trying 7z. stderr: {_stderr[:200]}")
+                    logging.warning(f"[AscendaraDownloader] unrar failed (exit {_proc.returncode}), trying 7z. stderr: {_stderr[:200]}")
             if not _extraction_success:
                 if _7z_bin:
-                    logging.info(f"[RobustDownloader] Extracting encrypted RAR with 7z: {_7z_bin}")
+                    logging.info(f"[AscendaraDownloader] Extracting encrypted RAR with 7z: {_7z_bin}")
                     _proc = subprocess.Popen(
-                        [_7z_bin, 'x', '-psteamrip.com', f'-o{self.download_dir}', '-y', archive_path],
+                        [_7z_bin, 'x', '-psteamrip.com', f'-o{extract_to or self.download_dir}', '-y', archive_path],
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                         stdin=subprocess.DEVNULL, text=True,
                         creationflags=_CREATE_NO_WINDOW
@@ -1471,7 +1506,7 @@ class RobustDownloader:
                         "Encrypted RAR requires WinRAR or 7-Zip to extract. "
                         "Please install WinRAR from https://www.rarlab.com/ or 7-Zip from https://7-zip.org/"
                     )
-            logging.info(f"[RobustDownloader] Encrypted RAR extraction complete")
+            logging.info(f"[AscendaraDownloader] Encrypted RAR extraction complete")
             for dirpath, _, filenames in os.walk(self.download_dir):
                 for fname in filenames:
                     if fname.endswith('.url') or fname.endswith('.rar') or fname.endswith('.zip') or '_CommonRedist' in dirpath:
@@ -1491,7 +1526,7 @@ class RobustDownloader:
             else:
                 raise RuntimeError("System 'unrar' binary not found. Install it with: sudo apt-get install unrar")
 
-        logging.info(f"[RobustDownloader] Extracting RAR with system unrar: {archive_path}")
+        logging.info(f"[AscendaraDownloader] Extracting RAR with system unrar: {archive_path}")
 
         # Count existing files before extraction for progress tracking
         initial_file_count = 0
@@ -1556,10 +1591,10 @@ class RobustDownloader:
             ))
 
         if extraction_error:
-            logging.error(f"[RobustDownloader] RAR extraction failed: {extraction_error[0]}")
+            logging.error(f"[AscendaraDownloader] RAR extraction failed: {extraction_error[0]}")
             raise extraction_error[0]
 
-        logging.info(f"[RobustDownloader] RAR extraction complete")
+        logging.info(f"[AscendaraDownloader] RAR extraction complete")
 
         # Update extracted count from newly added files
         final_file_count = 0
@@ -1573,7 +1608,7 @@ class RobustDownloader:
         
         # Cap the count to never exceed total
         if self._files_extracted_count > self._total_files_to_extract:
-            logging.warning(f"[RobustDownloader] Extracted count ({self._files_extracted_count}) exceeds total ({self._total_files_to_extract}), capping")
+            logging.warning(f"[AscendaraDownloader] Extracted count ({self._files_extracted_count}) exceeds total ({self._total_files_to_extract}), capping")
             self._files_extracted_count = self._total_files_to_extract
 
         # Clean up unwanted files (.url and _CommonRedist)
@@ -1581,9 +1616,9 @@ class RobustDownloader:
             if '_CommonRedist' in root:
                 try:
                     shutil.rmtree(root)
-                    logging.info(f"[RobustDownloader] Removed _CommonRedist: {root}")
+                    logging.info(f"[AscendaraDownloader] Removed _CommonRedist: {root}")
                 except Exception as e:
-                    logging.warning(f"[RobustDownloader] Could not remove _CommonRedist: {e}")
+                    logging.warning(f"[AscendaraDownloader] Could not remove _CommonRedist: {e}")
                 continue
 
             for fname in files_in_dir:
@@ -1605,31 +1640,38 @@ class RobustDownloader:
 
         self._update_extraction_progress("Complete", self._files_extracted_count, self._total_files_to_extract, force=True)
     
-    def _extract_rar_with_library(self, archive_path: str, watching_data: Dict):
+    def _extract_rar_with_library(self, archive_path: str, watching_data: Dict, extract_to: str = None):
         """Extract a RAR file using Python unrar library (Windows with bundled DLL)."""
         from unrar import rarfile
         import threading
         
-        logging.info(f"[RobustDownloader] Extracting RAR with Python library: {archive_path}")
+        logging.info(f"[AscendaraDownloader] Extracting RAR with Python library: {archive_path}")
         
-        # Count existing files before extraction for progress tracking
-        initial_file_count = 0
-        try:
-            for root, dirs, files_in_dir in os.walk(self.download_dir):
-                initial_file_count += len([f for f in files_in_dir if not f.endswith('.url') and not f.endswith('.rar') and not f.endswith('.zip')])
-        except Exception:
-            pass
+        # Count existing files before extraction starts for delta-based progress tracking
+        def _count_extracted_files():
+            n = 0
+            try:
+                for _r, _d, _fs in os.walk(self.download_dir):
+                    for _f in _fs:
+                        if (not _f.endswith('.url') and not _f.endswith('.rar') and
+                                not _f.endswith('.zip') and not _f.endswith('.ascendara.json') and
+                                _f != 'filemap.ascendara.json'):
+                            n += 1
+            except Exception:
+                pass
+            return n
+        initial_file_count = _count_extracted_files()
         
         with rarfile.RarFile(archive_path, 'r') as rar_ref:
             try:
-                rar_ref.setpassword(b'steamrip.com')
+                rar_ref.setpassword('steamrip.com')
             except Exception:
                 pass
             # Filter members to extract (exclude .url and _CommonRedist)
             rar_files = [info for info in rar_ref.infolist() 
                         if not info.filename.endswith('.url') and '_CommonRedist' not in info.filename]
             
-            logging.info(f"[RobustDownloader] Extracting {len(rar_files)} files from RAR")
+            logging.info(f"[AscendaraDownloader] Extracting {len(rar_files)} files from RAR")
             
             # Use extractall() in thread for speed, monitor directory for progress
             extraction_complete = threading.Event()
@@ -1637,7 +1679,7 @@ class RobustDownloader:
             
             def extract_thread():
                 try:
-                    rar_ref.extractall(self.download_dir)
+                    rar_ref.extractall(extract_to or self.download_dir)
                 except Exception as e:
                     extraction_error.append(e)
                 finally:
@@ -1651,37 +1693,29 @@ class RobustDownloader:
             last_count = 0
             last_update_time = time.time()
             heartbeat_count = 0
-            last_file_name = "Preparing..."
+            last_file_name = "Extracting..."
+            _previous_file_set = set()
             
             while not extraction_complete.is_set():
-                # Count files in extraction directory and find most recent file
-                current_count = 0
-                latest_file = None
-                latest_mtime = 0
-                
+                # Build current file set and count
+                _current_files = set()
                 try:
-                    for root, dirs, files_in_dir in os.walk(self.download_dir):
-                        for f in files_in_dir:
-                            if not f.endswith('.url') and not f.endswith('.rar') and not f.endswith('.zip'):
-                                current_count += 1
-                                # Track the most recently modified file
-                                try:
-                                    full_path = os.path.join(root, f)
-                                    mtime = os.path.getmtime(full_path)
-                                    if mtime > latest_mtime:
-                                        latest_mtime = mtime
-                                        latest_file = f
-                                except Exception:
-                                    pass
+                    for _r, _d, _fs in os.walk(self.download_dir):
+                        for _f in _fs:
+                            if (not _f.endswith('.url') and not _f.endswith('.rar') and
+                                    not _f.endswith('.zip') and not _f.endswith('.ascendara.json') and
+                                    _f != 'filemap.ascendara.json'):
+                                _current_files.add(os.path.join(_r, _f))
                 except Exception:
                     pass
+                newly_extracted = max(0, len(_current_files) - initial_file_count)
                 
-                # Calculate newly extracted files
-                newly_extracted = max(0, current_count - initial_file_count)
-                
-                # Update current file name if we found a new one
-                if latest_file and latest_file != last_file_name:
-                    last_file_name = latest_file
+                # Find newly appeared files since last check for "current file"
+                _new_files = _current_files - _previous_file_set
+                if _new_files:
+                    # Show the most recent filename (alphabetically last for consistency)
+                    last_file_name = os.path.basename(sorted(_new_files)[-1])
+                    _previous_file_set = _current_files
                 
                 # Update progress if files changed or every 5 seconds
                 current_time = time.time()
@@ -1692,7 +1726,7 @@ class RobustDownloader:
                     heartbeat_count += 1
                     files_extracted_this_archive = self._files_extracted_count + newly_extracted
                     percent = (files_extracted_this_archive / self._total_files_to_extract * 100) if self._total_files_to_extract > 0 else 0
-                    logging.info(f"[RobustDownloader] Extraction heartbeat #{heartbeat_count}: {newly_extracted} files extracted so far ({percent:.1f}%)")
+                    logging.info(f"[AscendaraDownloader] Extraction heartbeat #{heartbeat_count}: {newly_extracted} files extracted so far ({percent:.1f}%)")
                     self._update_extraction_progress(last_file_name, files_extracted_this_archive, self._total_files_to_extract, force=True)
                     last_update_time = current_time
                 
@@ -1700,7 +1734,7 @@ class RobustDownloader:
                 if newly_extracted > last_count:
                     files_extracted_this_archive = self._files_extracted_count + newly_extracted
                     percent = (files_extracted_this_archive / self._total_files_to_extract * 100) if self._total_files_to_extract > 0 else 0
-                    logging.info(f"[RobustDownloader] Extraction progress: {files_extracted_this_archive}/{self._total_files_to_extract} files ({percent:.1f}%) - {last_file_name}")
+                    logging.info(f"[AscendaraDownloader] Extraction progress: {files_extracted_this_archive}/{self._total_files_to_extract} files ({percent:.1f}%) - {last_file_name}")
                     self._update_extraction_progress(last_file_name, files_extracted_this_archive, self._total_files_to_extract, force=True)
                     last_count = newly_extracted
                     last_update_time = current_time
@@ -1708,15 +1742,15 @@ class RobustDownloader:
                 time.sleep(0.5)  # Check every 0.5 seconds
             
             # Wait for thread to complete fully (no timeout - must finish)
-            logging.info(f"[RobustDownloader] Waiting for RAR extraction thread to complete...")
+            logging.info(f"[AscendaraDownloader] Waiting for RAR extraction thread to complete...")
             thread.join()
-            logging.info(f"[RobustDownloader] RAR extraction thread completed")
+            logging.info(f"[AscendaraDownloader] RAR extraction thread completed")
             
             if extraction_error:
-                logging.error(f"[RobustDownloader] RAR extraction failed: {extraction_error[0]}")
+                logging.error(f"[AscendaraDownloader] RAR extraction failed: {extraction_error[0]}")
                 raise extraction_error[0]
             
-            logging.info(f"[RobustDownloader] RAR extraction complete")
+            logging.info(f"[AscendaraDownloader] RAR extraction complete")
             
             # Update extracted count from newly added files
             final_file_count = 0
@@ -1730,7 +1764,7 @@ class RobustDownloader:
             
             # Cap the count to never exceed total
             if self._files_extracted_count > self._total_files_to_extract:
-                logging.warning(f"[RobustDownloader] Extracted count ({self._files_extracted_count}) exceeds total ({self._total_files_to_extract}), capping")
+                logging.warning(f"[AscendaraDownloader] Extracted count ({self._files_extracted_count}) exceeds total ({self._total_files_to_extract}), capping")
                 self._files_extracted_count = self._total_files_to_extract
         
         # Clean up unwanted files (.url and _CommonRedist)
@@ -1738,9 +1772,9 @@ class RobustDownloader:
             if '_CommonRedist' in root:
                 try:
                     shutil.rmtree(root)
-                    logging.info(f"[RobustDownloader] Removed _CommonRedist: {root}")
+                    logging.info(f"[AscendaraDownloader] Removed _CommonRedist: {root}")
                 except Exception as e:
-                    logging.warning(f"[RobustDownloader] Could not remove _CommonRedist: {e}")
+                    logging.warning(f"[AscendaraDownloader] Could not remove _CommonRedist: {e}")
                 continue
             
             for fname in files_in_dir:
@@ -1763,111 +1797,74 @@ class RobustDownloader:
         self._update_extraction_progress("Complete", self._files_extracted_count, self._total_files_to_extract, force=True)
     
     def _flatten_directories(self):
-        """Flatten nested directories that should be at root level."""
+        """Move game files from the extraction subdirectory up to the root game dir, preserving all folder structure."""
         protected_files = {
             f"{sanitize_folder_name(self.game)}.ascendara.json",
             "filemap.ascendara.json",
-            "game.ascendara.json",
-            "header.jpg",
-            "header.png",
-            "header.webp"
         }
         
-        nested_dirs_to_check = []
-        
-        # Check for game-named directory
-        game_named_dir = os.path.join(self.download_dir, sanitize_folder_name(self.game))
-        if os.path.isdir(game_named_dir):
-            nested_dirs_to_check.append(game_named_dir)
-            logging.info(f"[RobustDownloader] Found game-named dir to flatten: {game_named_dir}")
-        
-        # Check for single subdirectory
+        # List immediate subdirs (skip system/metadata dirs)
         subdirs = []
         for item in os.listdir(self.download_dir):
             item_path = os.path.join(self.download_dir, item)
-            if os.path.isdir(item_path) and not item.endswith('.ascendara') and item != '_CommonRedist':
+            if os.path.isdir(item_path) and item != '_CommonRedist' and not item.endswith('.ascendara'):
                 subdirs.append(item_path)
         
-        logging.info(f"[RobustDownloader] Found {len(subdirs)} subdirectories")
+        logging.info(f"[AscendaraDownloader] Found {len(subdirs)} subdirectories")
         
-        # Also check for SteamRIP-style directories (game name with -SteamRIP.com suffix)
+        if not subdirs:
+            logging.info("[AscendaraDownloader] No directories to flatten")
+            return
+        
+        # Find the subdir that contains a .exe — that is the game's root folder
+        target_dir = None
         for subdir in subdirs:
-            subdir_name = os.path.basename(subdir).lower()
-            game_lower = self.game.lower()
-            # Get first meaningful word (strip punctuation)
-            first_word = ''.join(c for c in game_lower.split()[0] if c.isalnum()) if game_lower else ""
-            # Normalize subdir name for comparison
-            subdir_normalized = subdir_name.replace('-', ' ').replace('_', ' ').replace('.', ' ')
-            
-            should_flatten = False
-            reason = ""
-            
-            if 'steamrip' in subdir_name:
-                should_flatten = True
-                reason = "contains 'steamrip'"
-            elif game_lower.replace(' ', '-').replace(':', '') in subdir_name.replace(' ', '-').replace(':', ''):
-                should_flatten = True
-                reason = "matches game name pattern"
-            elif first_word and len(first_word) >= 3 and first_word in subdir_normalized:
-                should_flatten = True
-                reason = f"contains first word '{first_word}'"
-            
-            if should_flatten and subdir not in nested_dirs_to_check:
-                nested_dirs_to_check.append(subdir)
-                logging.info(f"[RobustDownloader] Found dir to flatten: {subdir} ({reason})")
+            for _root, _dirs, _files in os.walk(subdir):
+                if any(f.lower().endswith('.exe') for f in _files):
+                    target_dir = subdir
+                    break
+            if target_dir:
+                break
         
-        if len(subdirs) == 1 and subdirs[0] not in nested_dirs_to_check:
-            root_files = [f for f in os.listdir(self.download_dir) 
-                         if os.path.isfile(os.path.join(self.download_dir, f)) 
-                         and f not in protected_files
-                         and not f.endswith('.ascendara.json')]
+        # Fall back: if only one subdir exists, flatten it regardless
+        if not target_dir:
+            if len(subdirs) == 1:
+                target_dir = subdirs[0]
+            else:
+                logging.info("[AscendaraDownloader] Multiple subdirs found, none contain a .exe — skipping flatten")
+                return
+        
+        logging.info(f"[AscendaraDownloader] Flattening: {target_dir}")
+        
+        for item in list(os.listdir(target_dir)):
+            src = os.path.join(target_dir, item)
+            dst = os.path.join(self.download_dir, item)
             
-            if len(root_files) == 0:
-                subdir_contents = os.listdir(subdirs[0])
-                if len(subdir_contents) > 0:
-                    nested_dirs_to_check.append(subdirs[0])
-                    logging.info(f"[RobustDownloader] Found single subdir to flatten: {subdirs[0]}")
+            if os.path.normpath(dst) == os.path.normpath(target_dir):
+                continue
+            if item in protected_files:
+                continue
+            if not os.path.exists(src):
+                continue
+            
+            if os.path.exists(dst):
+                if os.path.isdir(dst):
+                    shutil.rmtree(dst, ignore_errors=True)
+                else:
+                    os.remove(dst)
+            
+            try:
+                shutil.move(src, dst)
+            except Exception as e:
+                logging.error(f"[AscendaraDownloader] Failed to move {src}: {e}")
         
-        if not nested_dirs_to_check:
-            logging.info(f"[RobustDownloader] No directories to flatten")
-        
-        for nested_dir in nested_dirs_to_check:
-            if os.path.isdir(nested_dir):
-                logging.info(f"[RobustDownloader] Flattening: {nested_dir}")
-                items_to_move = os.listdir(nested_dir)
-                
-                for item in items_to_move:
-                    src = os.path.join(nested_dir, item)
-                    dst = os.path.join(self.download_dir, item)
-                    
-                    if os.path.normpath(dst) == os.path.normpath(nested_dir):
-                        continue
-                    
-                    if item in protected_files:
-                        continue
-                    
-                    if not os.path.exists(src):
-                        continue
-                    
-                    if os.path.exists(dst):
-                        if os.path.isdir(dst):
-                            shutil.rmtree(dst, ignore_errors=True)
-                        else:
-                            os.remove(dst)
-                    
-                    try:
-                        shutil.move(src, dst)
-                    except Exception as e:
-                        logging.error(f"[RobustDownloader] Failed to move {src}: {e}")
-                
-                # Delete empty nested directory
-                try:
-                    remaining = os.listdir(nested_dir)
-                    if len(remaining) == 0:
-                        shutil.rmtree(nested_dir, ignore_errors=True)
-                        logging.info(f"[RobustDownloader] Deleted empty dir: {nested_dir}")
-                except Exception:
-                    pass
+        # Remove empty shell directory
+        try:
+            if not os.listdir(target_dir):
+                shutil.rmtree(target_dir, ignore_errors=True)
+                logging.info(f"[AscendaraDownloader] Deleted empty dir: {target_dir}")
+        except Exception:
+            pass
     
     def _cleanup_junk_files(self):
         """Remove .url files and _CommonRedist folders."""
@@ -1877,7 +1874,7 @@ class RobustDownloader:
                     file_path = os.path.join(root, fname)
                     try:
                         os.remove(file_path)
-                        logging.info(f"[RobustDownloader] Deleted .url: {file_path}")
+                        logging.info(f"[AscendaraDownloader] Deleted .url: {file_path}")
                     except Exception:
                         pass
             
@@ -1886,7 +1883,7 @@ class RobustDownloader:
                     dir_path = os.path.join(root, d)
                     try:
                         shutil.rmtree(dir_path)
-                        logging.info(f"[RobustDownloader] Deleted _CommonRedist: {dir_path}")
+                        logging.info(f"[AscendaraDownloader] Deleted _CommonRedist: {dir_path}")
                     except Exception:
                         pass
     
@@ -1897,13 +1894,13 @@ class RobustDownloader:
             watching_path: Path to the filemap JSON
             backup_dir: Path to backup directory (for updates)
         """
-        logging.info(f"[RobustDownloader] Starting verification of extracted files")
+        logging.info(f"[AscendaraDownloader] Starting verification of extracted files")
         verify_start_time = time.time()
         try:
             with open(watching_path, 'r') as f:
                 watching_data = json.load(f)
             
-            logging.info(f"[RobustDownloader] Verifying {len(watching_data)} files")
+            logging.info(f"[AscendaraDownloader] Verifying {len(watching_data)} files")
             verify_errors = []
             
             # Log any remaining archives as warnings; game content may legitimately include archives,
@@ -1913,7 +1910,7 @@ class RobustDownloader:
                     if file.endswith('.rar') or file.endswith('.zip') or file.endswith('.7z'):
                         archive_path = os.path.join(root, file)
                         rel_path = os.path.relpath(archive_path, self.download_dir)
-                        logging.warning(f"[RobustDownloader] Found archive after extraction (may be game content or failed cleanup): {rel_path}")
+                        logging.warning(f"[AscendaraDownloader] Found archive after extraction (may be game content or failed cleanup): {rel_path}")
             
             verified_count = 0
             for file_path, file_info in watching_data.items():
@@ -1923,14 +1920,14 @@ class RobustDownloader:
                 full_path = os.path.join(self.download_dir, file_path)
                 if not os.path.exists(full_path):
                     verify_errors.append({"file": file_path, "error": "File not found"})
-                    logging.warning(f"[RobustDownloader] Verification failed - file not found: {file_path}")
+                    logging.warning(f"[AscendaraDownloader] Verification failed - file not found: {file_path}")
                 elif os.path.getsize(full_path) != file_info['size']:
                     verify_errors.append({"file": file_path, "error": f"Size mismatch: expected {file_info['size']}, got {os.path.getsize(full_path)}"})
-                    logging.warning(f"[RobustDownloader] Verification failed - size mismatch: {file_path}")
+                    logging.warning(f"[AscendaraDownloader] Verification failed - size mismatch: {file_path}")
                 else:
                     verified_count += 1
             
-            logging.info(f"[RobustDownloader] Verification complete: {verified_count} files OK, {len(verify_errors)} errors")
+            logging.info(f"[AscendaraDownloader] Verification complete: {verified_count} files OK, {len(verify_errors)} errors")
             
             # Ensure verifying state shows for at least 1 second in the UI
             elapsed = time.time() - verify_start_time
@@ -1943,9 +1940,9 @@ class RobustDownloader:
                 
                 # Restore from backup if this is an update
                 if backup_dir:
-                    logging.warning(f"[RobustDownloader] Update verification failed, restoring from backup")
+                    logging.warning(f"[AscendaraDownloader] Update verification failed, restoring from backup")
                     if self._restore_from_backup(backup_dir):
-                        logging.info(f"[RobustDownloader] Successfully restored original files")
+                        logging.info(f"[AscendaraDownloader] Successfully restored original files")
                         if self.withNotification:
                             _launch_notification(
                                 self.withNotification,
@@ -1953,7 +1950,7 @@ class RobustDownloader:
                                 f"Update failed but original files were restored"
                             )
                     else:
-                        logging.error(f"[RobustDownloader] Failed to restore from backup")
+                        logging.error(f"[AscendaraDownloader] Failed to restore from backup")
                         if self.withNotification:
                             _launch_notification(
                                 self.withNotification,
@@ -1970,19 +1967,19 @@ class RobustDownloader:
                 # Cleanup backup after successful update
                 if backup_dir:
                     self._cleanup_backup(backup_dir)
-                    logging.info(f"[RobustDownloader] Update completed successfully, backup cleaned up")
+                    logging.info(f"[AscendaraDownloader] Update completed successfully, backup cleaned up")
                 
                 if "downloadingData" in self.game_info:
                     del self.game_info["downloadingData"]
                     safe_write_json(self.game_info_path, self.game_info)
         except Exception as e:
-            logging.error(f"[RobustDownloader] Verification error: {e}")
+            logging.error(f"[AscendaraDownloader] Verification error: {e}")
             
             # Restore from backup if this is an update
             if backup_dir:
-                logging.warning(f"[RobustDownloader] Update error, restoring from backup")
+                logging.warning(f"[AscendaraDownloader] Update error, restoring from backup")
                 if self._restore_from_backup(backup_dir):
-                    logging.info(f"[RobustDownloader] Successfully restored original files after error")
+                    logging.info(f"[AscendaraDownloader] Successfully restored original files after error")
                     if self.withNotification:
                         _launch_notification(
                             self.withNotification,
@@ -1990,14 +1987,14 @@ class RobustDownloader:
                             f"Update failed but original files were restored"
                         )
                 else:
-                    logging.error(f"[RobustDownloader] Failed to restore from backup after error")
+                    logging.error(f"[AscendaraDownloader] Failed to restore from backup after error")
             
             handleerror(self.game_info, self.game_info_path, e)
     
     def _detect_and_set_executable(self):
         """Intelligently detect and set the correct executable file for the game."""
         try:
-            logging.info(f"[RobustDownloader] Detecting executable for {self.game}")
+            logging.info(f"[AscendaraDownloader] Detecting executable for {self.game}")
             
             # Collect all .exe files in the download directory
             exe_files = []
@@ -2014,10 +2011,10 @@ class RobustDownloader:
                         })
             
             if not exe_files:
-                logging.warning(f"[RobustDownloader] No .exe files found in {self.download_dir}")
+                logging.warning(f"[AscendaraDownloader] No .exe files found in {self.download_dir}")
                 return
             
-            logging.info(f"[RobustDownloader] Found {len(exe_files)} .exe files")
+            logging.info(f"[AscendaraDownloader] Found {len(exe_files)} .exe files")
             
             # Try to find executable reference in text files
             exe_from_text = self._find_exe_in_text_files()
@@ -2037,13 +2034,13 @@ class RobustDownloader:
                                 'crash', 'report', 'config', 'settings', 'easyanticheat', 
                                 'battleye', 'steam_api']
                 if any(keyword in exe_name_lower for keyword in skip_keywords):
-                    logging.debug(f"[RobustDownloader] Skipping {exe['name']} (installer/utility)")
+                    logging.debug(f"[AscendaraDownloader] Skipping {exe['name']} (installer/utility)")
                     continue
                 
                 # Exact match with text file reference
                 if exe_from_text and exe['name'].lower() == exe_from_text.lower():
                     score += 1000
-                    logging.info(f"[RobustDownloader] Exact match with text file: {exe['name']}")
+                    logging.info(f"[AscendaraDownloader] Exact match with text file: {exe['name']}")
                 
                 # Partial match with text file reference
                 if exe_from_text and exe_from_text.lower() in exe_name_lower:
@@ -2082,7 +2079,7 @@ class RobustDownloader:
                         score += 20
                         break
                 
-                logging.debug(f"[RobustDownloader] {exe['name']}: score={score}, size={exe['size']}, depth={depth}")
+                logging.debug(f"[AscendaraDownloader] {exe['name']}: score={score}, size={exe['size']}, depth={depth}")
                 
                 if score > best_score:
                     best_score = score
@@ -2090,17 +2087,17 @@ class RobustDownloader:
             
             if best_exe:
                 self.game_info['executable'] = best_exe['path']
-                logging.info(f"[RobustDownloader] Set executable to: {best_exe['rel_path']} (score: {best_score})")
+                logging.info(f"[AscendaraDownloader] Set executable to: {best_exe['rel_path']} (score: {best_score})")
                 safe_write_json(self.game_info_path, self.game_info)
             else:
                 # Fallback to first exe if no good match found
                 if exe_files:
                     self.game_info['executable'] = exe_files[0]['path']
-                    logging.warning(f"[RobustDownloader] No good match found, using first exe: {exe_files[0]['rel_path']}")
+                    logging.warning(f"[AscendaraDownloader] No good match found, using first exe: {exe_files[0]['rel_path']}")
                     safe_write_json(self.game_info_path, self.game_info)
                 
         except Exception as e:
-            logging.error(f"[RobustDownloader] Error detecting executable: {e}")
+            logging.error(f"[AscendaraDownloader] Error detecting executable: {e}")
     
     def _find_exe_in_text_files(self):
         """Search text files for executable references."""
@@ -2127,18 +2124,18 @@ class RobustDownloader:
                                                 ['unins', 'setup', 'install', 'redist', 'vcredist', 'directx']
                                             )]
                                             if filtered:
-                                                logging.info(f"[RobustDownloader] Found exe reference in {file}: {filtered[0]}")
+                                                logging.info(f"[AscendaraDownloader] Found exe reference in {file}: {filtered[0]}")
                                                 return filtered[0].strip()
                                     break
                                 except (UnicodeDecodeError, LookupError):
                                     continue
                         except Exception as e:
-                            logging.debug(f"[RobustDownloader] Error reading {file}: {e}")
+                            logging.debug(f"[AscendaraDownloader] Error reading {file}: {e}")
                             continue
             
             return None
         except Exception as e:
-            logging.error(f"[RobustDownloader] Error searching text files: {e}")
+            logging.error(f"[AscendaraDownloader] Error searching text files: {e}")
             return None
     
     def _handle_post_download_behavior(self):
@@ -2146,30 +2143,30 @@ class RobustDownloader:
         try:
             settings = load_settings()
             behavior = settings.get('behaviorAfterDownload', 'none')
-            logging.info(f"[RobustDownloader] Post-download behavior: {behavior}")
+            logging.info(f"[AscendaraDownloader] Post-download behavior: {behavior}")
             
             if behavior == 'lock':
-                logging.info("[RobustDownloader] Locking computer")
+                logging.info("[AscendaraDownloader] Locking computer")
                 if sys.platform == 'win32':
                     os.system('rundll32.exe user32.dll,LockWorkStation')
                 elif sys.platform == 'darwin':
                     os.system('/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend')
             elif behavior == 'sleep':
-                logging.info("[RobustDownloader] Putting computer to sleep")
+                logging.info("[AscendaraDownloader] Putting computer to sleep")
                 if sys.platform == 'win32':
                     os.system('rundll32.exe powrprof.dll,SetSuspendState 0,1,0')
                 elif sys.platform == 'darwin':
                     os.system('pmset sleepnow')
             elif behavior == 'shutdown':
-                logging.info("[RobustDownloader] Shutting down computer")
+                logging.info("[AscendaraDownloader] Shutting down computer")
                 if sys.platform == 'win32':
                     os.system('shutdown /s /t 60 /c "Ascendara download complete - shutting down in 60 seconds"')
                 elif sys.platform == 'darwin':
                     os.system('osascript -e "tell app \\"System Events\\" to shut down"')
             else:
-                logging.info("[RobustDownloader] No post-download action required")
+                logging.info("[AscendaraDownloader] No post-download action required")
         except Exception as e:
-            logging.error(f"[RobustDownloader] Post-download behavior error: {e}")
+            logging.error(f"[AscendaraDownloader] Post-download behavior error: {e}")
 
 
 # CLI Entrypoint
@@ -2201,7 +2198,7 @@ def main():
     args = parser.parse_args()
     
     try:
-        downloader = RobustDownloader(
+        downloader = AscendaraDownloader(
             args.game, args.online, args.dlc, args.isVr, 
             args.updateFlow, args.version, args.size, 
             args.download_dir, args.gameID
