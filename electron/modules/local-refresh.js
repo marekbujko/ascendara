@@ -361,8 +361,6 @@ function registerLocalRefreshHandlers() {
               String(fetchPerPage),
               "--workers",
               String(workerCount),
-              "--view-workers",
-              "4",
             ];
             // Only add cookie if provided (CF protection may not be active)
             if (cfClearance) {
@@ -382,8 +380,6 @@ function registerLocalRefreshHandlers() {
               String(fetchPerPage),
               "--workers",
               String(workerCount),
-              "--view-workers",
-              "4",
             ];
             // Only add cookie if provided (CF protection may not be active)
             if (cfClearance) {
@@ -404,8 +400,6 @@ function registerLocalRefreshHandlers() {
               String(fetchPerPage),
               "--workers",
               String(workerCount),
-              "--view-workers",
-              "32",
             ];
           } else {
             executablePath = path.join(process.resourcesPath, "AscendaraLocalRefresh");
@@ -418,8 +412,6 @@ function registerLocalRefreshHandlers() {
               String(fetchPerPage),
               "--workers",
               String(workerCount),
-              "--view-workers",
-              "32",
             ];
           }
           // Only add cookie if provided (CF protection may not be active)

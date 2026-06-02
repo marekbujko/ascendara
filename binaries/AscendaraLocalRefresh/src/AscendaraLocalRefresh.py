@@ -340,12 +340,6 @@ def main():
         help='Skip fetching view counts (faster refresh)'
     )
     parser.add_argument(
-        '--view-workers',
-        type=int,
-        default=4,
-        help='Number of workers for view count fetching (default: 4)'
-    )
-    parser.add_argument(
         '--user-agent', '-u',
         default=None,
         help='Custom User-Agent string (for Firefox/Opera cookie compatibility)'
@@ -513,8 +507,7 @@ def main():
         if not scraper.initialize(
             cookie=args.cookie,
             user_agent=args.user_agent,
-            skip_views=args.skip_views,
-            view_workers=args.view_workers
+            skip_views=args.skip_views
         ):
             logging.error("Failed to initialize scraper")
             progress.add_error("Failed to initialize scraper")

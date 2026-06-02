@@ -26,7 +26,6 @@ import {
 } from "lucide-react";
 
 const STEAMRIP_POSTS_URL = "https://steamrip.com/wp-json/wp/v2/posts?per_page=1&page=1";
-const STEAMRIP_AJAX_URL = "https://steamrip.com/wp-admin/admin-ajax.php?postviews_id=1&action=tie_postviews";
 
 const RefreshIndexDialog = ({
   open,
@@ -45,6 +44,7 @@ const RefreshIndexDialog = ({
   const [hasStartedRefresh, setHasStartedRefresh] = useState(false);
   const [checkingCF, setCheckingCF] = useState(false);
   const [cfActive, setCfActive] = useState(null);
+  const [apiAccessibleNoCookie, setApiAccessibleNoCookie] = useState(false);
 
   // Determine if this is a cookie refresh (mid-process) vs initial refresh
   const isCookieRefresh = mode === "cookie-refresh";
@@ -56,20 +56,18 @@ const RefreshIndexDialog = ({
     const checkCloudflareProtection = async () => {
       setCheckingCF(true);
       try {
-        const [postsResponse, ajaxResponse] = await Promise.allSettled([
+        const postsResult = await Promise.race([
           fetch(STEAMRIP_POSTS_URL, { method: "GET", mode: "cors" }),
-          fetch(STEAMRIP_AJAX_URL, { method: "GET", mode: "cors" }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
         ]);
 
-        const postsStatus = postsResponse.status === "fulfilled" ? postsResponse.value.status : 403;
-        const ajaxStatus = ajaxResponse.status === "fulfilled" ? ajaxResponse.value.status : 403;
+        console.log(`CF check - posts: ${postsResult.status}`);
 
-        console.log(`CF check - posts: ${postsStatus}, admin-ajax: ${ajaxStatus}`);
-
-        if (postsStatus === 200 && ajaxStatus === 200) {
-          // CF protection is NOT active on either endpoint
+        if (postsResult.status === 200) {
+          // CF protection is NOT active - posts API accessible without cookie
           console.log("Cloudflare protection is NOT active - cookie not required");
           setCfActive(false);
+          setApiAccessibleNoCookie(true);
           // Auto-start refresh without cookie
           setTimeout(() => {
             onStartRefresh({
@@ -80,12 +78,11 @@ const RefreshIndexDialog = ({
             handleClose();
           }, 500);
         } else {
-          // CF protection is active on at least one endpoint
-          console.log("Cloudflare protection is active - cookie required");
+          console.log(`Cloudflare protection is active (status: ${postsResult.status}) - cookie required`);
           setCfActive(true);
         }
       } catch (error) {
-        // Error checking, assume CF is active
+        // Timeout or network error - assume CF is active
         console.log("Error checking CF protection, assuming CF is active:", error);
         setCfActive(true);
       } finally {
@@ -155,6 +152,7 @@ const RefreshIndexDialog = ({
     setHasStartedRefresh(false);
     setCheckingCF(false);
     setCfActive(null);
+    setApiAccessibleNoCookie(false);
   };
 
   const handleClose = () => {
@@ -467,6 +465,26 @@ const RefreshIndexDialog = ({
                           </li>
                         </ol>
                       </div>
+                      {apiAccessibleNoCookie && (
+                        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm">
+                          <p className="mb-2 font-medium text-foreground">
+                            {t("refreshDialog.noCookieNeeded") || "No captcha required?"}
+                          </p>
+                          <p className="mb-3 text-muted-foreground">
+                            {t("refreshDialog.noCookieNeededDesc") || "The SteamRIP API appears to be accessible without a cookie. You can start the refresh directly."}
+                          </p>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setHasStartedRefresh(true);
+                              onStartRefresh({ method: "no-cookie", cfClearance: null, isCookieRefresh });
+                              handleClose();
+                            }}
+                          >
+                            {t("refreshDialog.startWithoutCookie") || "Start without cookie"}
+                          </Button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

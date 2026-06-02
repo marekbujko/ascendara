@@ -15,7 +15,6 @@ import random
 import string
 from typing import Dict, List, Optional, Set
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from queue import Queue, Empty
 
 from base_scraper import BaseScraper
 from utils import encode_game_id
@@ -59,16 +58,17 @@ class SteamRIPScraper(BaseScraper):
         self.keep_alive_thread = None
         
         # View count fetching
-        self.view_count_queue = Queue()
+        self.view_counts_enabled = False
         self.view_count_cache = {}
-        self.view_count_cache_lock = threading.Lock()
-        self.view_count_stop_event = threading.Event()
-        self.view_count_threads = []
+        self.view_count_cache_file = None
+        self._VIEW_COUNT_DELAY = 1.5
+        self._VIEW_COUNT_MAX_SECONDS = 300
+        self._VIEW_COUNT_429_LIMIT = 5
     
     def get_source_name(self) -> str:
         return "SteamRIP"
     
-    def initialize(self, cookie: Optional[str] = None, user_agent: Optional[str] = None, 
+    def initialize(self, cookie: Optional[str] = None, user_agent: Optional[str] = None,
                    skip_views: bool = False, view_workers: int = 4) -> bool:
         """Initialize the SteamRIP scraper"""
         try:
@@ -94,9 +94,10 @@ class SteamRIPScraper(BaseScraper):
             # Start keep-alive thread
             self._start_keep_alive(interval=30)
             
-            # Start view count fetcher
+            # Set up view count fetching
             if not skip_views:
-                self._start_view_count_fetcher(cookie, view_workers, user_agent)
+                self.view_counts_enabled = True
+                self._load_view_count_cache()
             
             return True
             
@@ -153,7 +154,6 @@ class SteamRIPScraper(BaseScraper):
                         
                         if self._wait_for_cookie_refresh():
                             self.scraper = self._create_scraper(self.new_cookie_value[0], self.current_user_agent[0])
-                            self._restart_view_count_fetcher(self.new_cookie_value[0], 4, self.current_user_agent[0])
                             self.new_cookie_value[0] = None
                             consecutive_failures = 0
                             continue
@@ -232,7 +232,6 @@ class SteamRIPScraper(BaseScraper):
                             
                             if self._wait_for_cookie_refresh():
                                 self.scraper = self._create_scraper(self.new_cookie_value[0], self.current_user_agent[0])
-                                self._restart_view_count_fetcher(self.new_cookie_value[0], 4, self.current_user_agent[0])
                                 self.new_cookie_value[0] = None
                                 consecutive_failures = 0
                                 continue
@@ -253,8 +252,8 @@ class SteamRIPScraper(BaseScraper):
         
         self.logger.info(f"Processed {len(game_data)} games total")
         
-        # Apply view counts
-        self._apply_view_counts(game_data)
+        if self.view_counts_enabled:
+            self._fetch_queued_view_counts(game_data)
         
         return game_data
     
@@ -270,7 +269,6 @@ class SteamRIPScraper(BaseScraper):
     def cleanup(self):
         """Cleanup resources"""
         self._stop_keep_alive()
-        self._stop_view_count_fetcher()
         if self.scraper:
             self.scraper.close()
     
@@ -412,8 +410,8 @@ class SteamRIPScraper(BaseScraper):
             # Get dates
             latest_update = post.get("modified", "")[:10] if post.get("modified") else ""
             
-            # Queue view count fetch
-            self._queue_view_count_fetch(post_id)
+            # Use cached view count if available; otherwise queue for later
+            cached_weight = self.view_count_cache.get(str(post_id)) if self.view_counts_enabled else None
             
             # Encode post_id
             encoded_game_id = encode_game_id(post_id) if post_id else ""
@@ -427,14 +425,16 @@ class SteamRIPScraper(BaseScraper):
                 "dlc": has_dlc,
                 "dirlink": post.get("link", ""),
                 "download_links": download_links,
-                "weight": "0",
-                "_post_id": post_id,
+                "weight": cached_weight if cached_weight is not None else "0",
                 "imgID": img_id,
                 "gameID": encoded_game_id,
                 "category": categories,
                 "latest_update": latest_update,
                 "minReqs": min_reqs
             }
+            
+            if self.view_counts_enabled and cached_weight is None and post_id:
+                game_entry["_post_id"] = post_id
             
             return game_entry
         
@@ -701,144 +701,96 @@ class SteamRIPScraper(BaseScraper):
             self.keep_alive_thread.join(timeout=5)
         self.keep_alive_thread = None
     
-    def _start_view_count_fetcher(self, cookie, num_workers=4, user_agent=None):
-        """Start background threads that fetch view counts"""
-        cookie_str = None
-        if cookie:
-            cookie_str = cookie.strip().strip('"\'')
-            if not cookie_str.startswith("cf_clearance="):
-                cookie_str = f"cf_clearance={cookie_str}"
+    def _load_view_count_cache(self):
+        """Load persistent view count cache from disk."""
+        import os
+        self.view_count_cache_file = os.path.join(self.output_dir, "view_count_cache.json")
+        if os.path.exists(self.view_count_cache_file):
+            try:
+                with open(self.view_count_cache_file, "r", encoding="utf-8") as f:
+                    self.view_count_cache = json.load(f)
+                self.logger.info(f"Loaded {len(self.view_count_cache)} cached view counts")
+            except Exception as e:
+                self.logger.warning(f"Could not load view count cache: {e}")
+                self.view_count_cache = {}
+
+    def _save_view_count_cache(self):
+        """Save view count cache to disk."""
+        if not self.view_count_cache_file:
+            return
+        try:
+            with open(self.view_count_cache_file, "w", encoding="utf-8") as f:
+                json.dump(self.view_count_cache, f)
+            self.logger.info(f"Saved {len(self.view_count_cache)} view counts to cache")
+        except Exception as e:
+            self.logger.warning(f"Could not save view count cache: {e}")
+
+    def _fetch_queued_view_counts(self, game_data: List[Dict]):
+        """Fetch view counts for uncached posts serially with a 1.5s delay between requests.
+        Stops after self._VIEW_COUNT_429_LIMIT consecutive 429s or self._VIEW_COUNT_MAX_SECONDS elapsed.
+        Updates game_data in place and saves the cache on completion."""
+        pending = [(i, game["_post_id"]) for i, game in enumerate(game_data) if "_post_id" in game]
         
-        browser_type = "chrome"
-        final_user_agent = user_agent if user_agent else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
-        if user_agent and "firefox" in user_agent.lower():
-            browser_type = "firefox"
+        if not pending:
+            self.logger.info("All view counts served from cache")
+            return
         
-        def view_count_worker(worker_id):
-            self.logger.info(f"View count worker {worker_id} started")
+        self.logger.info(f"Fetching {len(pending)} view counts (1 per {self._VIEW_COUNT_DELAY}s, max {self._VIEW_COUNT_MAX_SECONDS}s)...")
+        
+        session = requests.Session()
+        session.headers.update(self.scraper.headers)
+        session.cookies.update(self.scraper.cookies)
+        adapter = requests.adapters.HTTPAdapter(max_retries=0)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        
+        consecutive_429s = 0
+        fetched = 0
+        start_time = time.time()
+        
+        for idx, (game_idx, post_id) in enumerate(pending):
+            if time.time() - start_time > self._VIEW_COUNT_MAX_SECONDS:
+                self.logger.warning(
+                    f"View count time limit ({self._VIEW_COUNT_MAX_SECONDS}s) reached after {fetched} fetches - saving and stopping"
+                )
+                break
             
-            view_scraper = cloudscraper.create_scraper(
-                browser={"browser": browser_type, "platform": "windows", "mobile": False}
-            )
-            headers = {"User-Agent": final_user_agent}
-            if cookie_str:
-                headers["Cookie"] = cookie_str
-            view_scraper.headers.update(headers)
-            adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=1)
-            view_scraper.mount('https://', adapter)
+            try:
+                url = f"https://steamrip.com/wp-admin/admin-ajax.php?postviews_id={post_id}&action=tie_postviews&_={int(time.time() * 1000)}"
+                response = session.get(url, timeout=(5, 8))
+                
+                if response.status_code == 200:
+                    consecutive_429s = 0
+                    views = re.sub(r'[^\d]', '', response.text.strip())
+                    if views:
+                        game_data[game_idx]["weight"] = views
+                        self.view_count_cache[str(post_id)] = views
+                    fetched += 1
+                    if fetched % 50 == 0:
+                        self.logger.info(f"View counts fetched: {fetched}/{len(pending)}")
+                        self._save_view_count_cache()
+                
+                elif response.status_code == 429:
+                    consecutive_429s += 1
+                    self.logger.debug(f"429 on post {post_id} ({consecutive_429s}/{self._VIEW_COUNT_429_LIMIT})")
+                    if consecutive_429s >= self._VIEW_COUNT_429_LIMIT:
+                        self.logger.warning(
+                            f"View count endpoint rate-limited ({consecutive_429s} consecutive 429s) - stopping"
+                        )
+                        break
             
-            fetched_count = 0
-            failed_count = 0
+            except Exception as e:
+                self.logger.debug(f"View count request failed for post {post_id}: {e}")
             
-            while not self.view_count_stop_event.is_set() or not self.view_count_queue.empty():
-                try:
-                    try:
-                        post_id = self.view_count_queue.get(timeout=0.5)
-                    except Empty:
-                        continue
-                    
-                    try:
-                        url = f"https://steamrip.com/wp-admin/admin-ajax.php?postviews_id={post_id}&action=tie_postviews&_={int(time.time() * 1000)}"
-                        response = view_scraper.get(url, timeout=10)
-                        if response.status_code == 200:
-                            views = re.sub(r'[^\d]', '', response.text.strip())
-                            if views:
-                                with self.view_count_cache_lock:
-                                    self.view_count_cache[post_id] = views
-                                fetched_count += 1
-                                if fetched_count % 100 == 0:
-                                    self.logger.debug(f"Worker {worker_id}: Fetched {fetched_count} view counts")
-                            else:
-                                failed_count += 1
-                        else:
-                            failed_count += 1
-                    except Exception as e:
-                        failed_count += 1
-                        self.logger.debug(f"Worker {worker_id}: Error fetching view count for {post_id}: {e}")
-                    
-                    time.sleep(0.1)
-                    
-                except Exception as e:
-                    self.logger.debug(f"View count worker {worker_id} error: {e}")
-            
-            view_scraper.close()
-            self.logger.info(f"View count worker {worker_id} finished. Fetched: {fetched_count}, Failed: {failed_count}")
+            if idx < len(pending) - 1:
+                time.sleep(self._VIEW_COUNT_DELAY)
         
-        self.view_count_stop_event.clear()
-        self.view_count_threads = []
-        for i in range(num_workers):
-            t = threading.Thread(target=view_count_worker, args=(i,), daemon=True, name=f"ViewCountWorker-{i}")
-            t.start()
-            self.view_count_threads.append(t)
-        
-        self.logger.info(f"Started {num_workers} view count fetcher workers")
-    
-    def _stop_view_count_fetcher(self):
-        """Stop the view count fetcher threads"""
-        if self.view_count_threads:
-            self.logger.info("Stopping view count fetcher...")
-            self.view_count_stop_event.set()
-            
-            for t in self.view_count_threads:
-                if t.is_alive():
-                    t.join(timeout=5)
-            
-            self.view_count_threads = []
-            self.logger.info(f"View count fetcher stopped. Cached {len(self.view_count_cache)} view counts.")
-    
-    def _restart_view_count_fetcher(self, cookie, num_workers=4, user_agent=None):
-        """Restart the view count fetcher with a new cookie"""
-        self.logger.info("Restarting view count fetcher with new cookie...")
-        
-        if self.view_count_threads:
-            self.view_count_stop_event.set()
-            for t in self.view_count_threads:
-                if t.is_alive():
-                    t.join(timeout=2)
-            self.view_count_threads = []
-        
-        self.view_count_stop_event.clear()
-        self._start_view_count_fetcher(cookie, num_workers=num_workers, user_agent=user_agent)
-        self.logger.info("View count fetcher restarted with new cookie")
-    
-    def _queue_view_count_fetch(self, post_id):
-        """Add a post_id to the view count fetch queue"""
-        if post_id:
-            self.view_count_queue.put(post_id)
-    
-    def _get_cached_view_count(self, post_id):
-        """Get view count from cache"""
-        with self.view_count_cache_lock:
-            return self.view_count_cache.get(post_id, "0")
-    
-    def _apply_view_counts(self, game_data):
-        """Apply cached view counts to game data"""
-        self.logger.info("Waiting for view count fetcher to finish...")
-        queue_wait_start = time.time()
-        max_queue_wait = 60
-        while not self.view_count_queue.empty() and (time.time() - queue_wait_start) < max_queue_wait:
-            remaining = self.view_count_queue.qsize()
-            if remaining > 0:
-                self.logger.info(f"Waiting for {remaining} view counts to be fetched...")
-            time.sleep(2)
-        
-        self._stop_view_count_fetcher()
-        
-        self.logger.info("Applying view counts to game data...")
-        games_with_views = 0
-        games_without_views = 0
         for game in game_data:
-            post_id = game.pop("_post_id", None)
-            if post_id:
-                view_count = self._get_cached_view_count(post_id)
-                game["weight"] = view_count
-                if view_count != "0":
-                    games_with_views += 1
-                else:
-                    games_without_views += 1
+            game.pop("_post_id", None)
         
-        self.logger.info(f"View count stats: {games_with_views} games with views, {games_without_views} games with weight=0")
-        self.logger.info(f"Total cached view counts: {len(self.view_count_cache)}")
+        self.logger.info(f"View count fetching complete: {fetched} new, {len(self.view_count_cache)} total cached")
+        self._save_view_count_cache()
+        session.close()
     
     def _wait_for_cookie_refresh(self):
         """Wait for user to provide a new cookie via stdin"""
