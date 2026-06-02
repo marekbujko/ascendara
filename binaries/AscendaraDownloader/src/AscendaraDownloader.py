@@ -1198,52 +1198,51 @@ class AscendaraDownloader:
                 extraction_errors.append(str(e))
                 continue
             
-            # Scan for new archives
-            for root, _, files in os.walk(self.download_dir):
-                for file in files:
-                    ext = os.path.splitext(file)[1].lower()
-                    if ext in archive_exts:
-                        new_archive = os.path.join(root, file)
-                        if new_archive not in processed_archives and new_archive not in archives_to_process:
-                            # Non-first parts of multi-part RAR sets were already consumed
-                            # by unrar when the first part was extracted. Delete them now
-                            # instead of queuing a doomed extraction that leaves GBs on disk.
-                            _mp = re.match(r'^.+\.part(\d+)\.rar$', file, re.IGNORECASE)
-                            if _mp and int(_mp.group(1)) != 1:
-                                logging.info(f"[AscendaraDownloader] Deleting non-first RAR part (content already extracted): {file}")
-                                try:
-                                    os.remove(new_archive)
-                                except Exception as _e:
-                                    logging.warning(f"[AscendaraDownloader] Could not delete non-first RAR part: {_e}")
-                                continue
-                            archives_to_process.append(new_archive)
-                            logging.info(f"[AscendaraDownloader] Found nested archive: {new_archive}")
-                            
-                            # Count files in nested archive and update total
+            # Scan for new archives at the top level only - game asset zips are
+            # nested deep inside subdirectories and must not be extracted/deleted.
+            # Repack continuation archives (part2.zip, etc.) always land at root.
+            for file in os.listdir(self.download_dir):
+                ext = os.path.splitext(file)[1].lower()
+                if ext in archive_exts:
+                    new_archive = os.path.join(self.download_dir, file)
+                    if new_archive not in processed_archives and new_archive not in archives_to_process:
+                        # Non-first parts of multi-part RAR sets were already consumed
+                        # by unrar when the first part was extracted. Delete them now
+                        # instead of queuing a doomed extraction that leaves GBs on disk.
+                        _mp = re.match(r'^.+\.part(\d+)\.rar$', file, re.IGNORECASE)
+                        if _mp and int(_mp.group(1)) != 1:
+                            logging.info(f"[AscendaraDownloader] Deleting non-first RAR part (content already extracted): {file}")
                             try:
-                                nested_file_count = 0
-                                if ext == '.zip':
-                                    with zipfile.ZipFile(new_archive, 'r') as zip_ref:
-                                        for zip_info in zip_ref.infolist():
-                                            if not zip_info.filename.endswith('.url') and '_CommonRedist' not in zip_info.filename and not zip_info.is_dir():
+                                os.remove(new_archive)
+                            except Exception as _e:
+                                logging.warning(f"[AscendaraDownloader] Could not delete non-first RAR part: {_e}")
+                            continue
+                        archives_to_process.append(new_archive)
+                        logging.info(f"[AscendaraDownloader] Found nested archive: {new_archive}")
+                        # Count files in nested archive and update total
+                        try:
+                            nested_file_count = 0
+                            if ext == '.zip':
+                                with zipfile.ZipFile(new_archive, 'r') as zip_ref:
+                                    for zip_info in zip_ref.infolist():
+                                        if not zip_info.filename.endswith('.url') and '_CommonRedist' not in zip_info.filename and not zip_info.is_dir():
+                                            nested_file_count += 1
+                            elif ext == '.rar':
+                                import shutil as _shutil
+                                _unrar = _shutil.which('unrar') or _shutil.which('unrar-free')
+                                if _unrar:
+                                    _result = subprocess.run([_unrar, 'l', new_archive], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                    for _line in _result.stdout.decode(errors='replace').splitlines():
+                                        _parts = _line.split()
+                                        if len(_parts) >= 5 and _parts[0] not in ('-', 'Name', '---'):
+                                            _fname = _parts[-1]
+                                            if not _fname.endswith('.url') and '_CommonRedist' not in _fname and not _fname.endswith('/'):
                                                 nested_file_count += 1
-                                elif ext == '.rar':
-                                    import shutil as _shutil
-                                    _unrar = _shutil.which('unrar') or _shutil.which('unrar-free')
-                                    if _unrar:
-                                        _result = subprocess.run([_unrar, 'l', new_archive], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                                        for _line in _result.stdout.decode(errors='replace').splitlines():
-                                            _parts = _line.split()
-                                            if len(_parts) >= 5 and _parts[0] not in ('-', 'Name', '---'):
-                                                _fname = _parts[-1]
-                                                if not _fname.endswith('.url') and '_CommonRedist' not in _fname and not _fname.endswith('/'):
-                                                    nested_file_count += 1
-                                
-                                if nested_file_count > 0:
-                                    self._total_files_to_extract += nested_file_count
-                                    logging.info(f"[AscendaraDownloader] Added {nested_file_count} files from nested archive (new total: {self._total_files_to_extract})")
-                            except Exception as e:
-                                logging.warning(f"[AscendaraDownloader] Could not count files in nested archive {new_archive}: {e}")
+                            if nested_file_count > 0:
+                                self._total_files_to_extract += nested_file_count
+                                logging.info(f"[AscendaraDownloader] Added {nested_file_count} files from nested archive (new total: {self._total_files_to_extract})")
+                        except Exception as e:
+                            logging.warning(f"[AscendaraDownloader] Could not count files in nested archive {new_archive}: {e}")
         
         # If every archive failed to extract, raise so the caller can handle the error
         if not any_extraction_succeeded and extraction_errors:
@@ -1647,20 +1646,21 @@ class AscendaraDownloader:
         
         logging.info(f"[AscendaraDownloader] Extracting RAR with Python library: {archive_path}")
         
-        # Count existing files before extraction starts for delta-based progress tracking
-        def _count_extracted_files():
-            n = 0
+        # Snapshot files present before extraction starts — used as baseline
+        def _snapshot_files():
+            s = set()
             try:
                 for _r, _d, _fs in os.walk(self.download_dir):
                     for _f in _fs:
                         if (not _f.endswith('.url') and not _f.endswith('.rar') and
                                 not _f.endswith('.zip') and not _f.endswith('.ascendara.json') and
                                 _f != 'filemap.ascendara.json'):
-                            n += 1
+                            s.add(os.path.join(_r, _f))
             except Exception:
                 pass
-            return n
-        initial_file_count = _count_extracted_files()
+            return s
+        _baseline_files = _snapshot_files()
+        initial_file_count = len(_baseline_files)
         
         with rarfile.RarFile(archive_path, 'r') as rar_ref:
             try:
@@ -1673,78 +1673,94 @@ class AscendaraDownloader:
             
             logging.info(f"[AscendaraDownloader] Extracting {len(rar_files)} files from RAR")
             
-            # Use extractall() in thread for speed, monitor directory for progress
-            extraction_complete = threading.Event()
+            # Extract file-by-file for accurate per-file progress reporting
             extraction_error = []
-            
-            def extract_thread():
-                try:
-                    rar_ref.extractall(extract_to or self.download_dir)
-                except Exception as e:
-                    extraction_error.append(e)
-                finally:
-                    extraction_complete.set()
-            
-            # Start extraction in background (non-daemon so it must complete)
-            thread = threading.Thread(target=extract_thread, daemon=False)
-            thread.start()
-            
-            # Monitor progress by counting extracted files and tracking latest file
-            last_count = 0
-            last_update_time = time.time()
+            dest_dir = extract_to or self.download_dir
+            local_extracted = 0
             heartbeat_count = 0
-            last_file_name = "Extracting..."
-            _previous_file_set = set()
-            
-            while not extraction_complete.is_set():
-                # Build current file set and count
-                _current_files = set()
-                try:
-                    for _r, _d, _fs in os.walk(self.download_dir):
-                        for _f in _fs:
-                            if (not _f.endswith('.url') and not _f.endswith('.rar') and
-                                    not _f.endswith('.zip') and not _f.endswith('.ascendara.json') and
-                                    _f != 'filemap.ascendara.json'):
-                                _current_files.add(os.path.join(_r, _f))
-                except Exception:
-                    pass
-                newly_extracted = max(0, len(_current_files) - initial_file_count)
+            last_heartbeat_time = time.time()
+
+            for rar_info in rar_files:
+                fname = os.path.basename(rar_info.filename.rstrip('/'))
+                if not fname:
+                    continue
                 
-                # Find newly appeared files since last check for "current file"
-                _new_files = _current_files - _previous_file_set
-                if _new_files:
-                    # Show the most recent filename (alphabetically last for consistency)
-                    last_file_name = os.path.basename(sorted(_new_files)[-1])
-                    _previous_file_set = _current_files
+                # Skip already-extracted files to allow resuming interrupted extractions
+                dest_path = os.path.join(dest_dir, rar_info.filename)
+                if os.path.exists(dest_path) and os.path.getsize(dest_path) > 0:
+                    local_extracted += 1
+                    files_extracted_this_archive = self._files_extracted_count + local_extracted
+                    percent = (files_extracted_this_archive / self._total_files_to_extract * 100) if self._total_files_to_extract > 0 else 0
+                    self._update_extraction_progress(fname, files_extracted_this_archive, self._total_files_to_extract, force=False)
+                    now = time.time()
+                    if now - last_heartbeat_time >= 5.0:
+                        heartbeat_count += 1
+                        logging.info(f"[AscendaraDownloader] Skipping (exists) #{heartbeat_count}: {local_extracted} files so far ({percent:.1f}%) - {fname}")
+                        last_heartbeat_time = now
+                    continue
+
+                EXTRACT_TIMEOUT = 600  # 10 minutes per file before declaring a hang
+                extract_exc = []
+                def _do_extract():
+                    try:
+                        rar_ref.extract(rar_info, dest_dir)
+                    except Exception as e:
+                        extract_exc.append(e)
+                t = threading.Thread(target=_do_extract, daemon=True)
+                t.start()
+                t.join(timeout=EXTRACT_TIMEOUT)
+                if t.is_alive():
+                    # Hung — log it and reopen the archive to recover
+                    logging.warning(f"[AscendaraDownloader] Extraction hung on {fname} after {EXTRACT_TIMEOUT}s, reopening RAR to resume")
+                    try:
+                        rar_ref.close()
+                    except Exception:
+                        pass
+                    try:
+                        rar_ref = rarfile.RarFile(archive_path, 'r')
+                        try:
+                            rar_ref.setpassword('steamrip.com')
+                        except Exception:
+                            pass
+                    except Exception as reopen_e:
+                        logging.error(f"[AscendaraDownloader] Could not reopen RAR after hang: {reopen_e}")
+                        break
+                    # The hung thread is abandoned (daemon); the file may be incomplete —
+                    # delete it so the skip check re-extracts it on next pass
+                    try:
+                        if os.path.exists(dest_path):
+                            os.remove(dest_path)
+                    except Exception:
+                        pass
+                    # Re-extract the hung file with the fresh handle
+                    try:
+                        rar_ref.extract(rar_info, dest_dir)
+                        local_extracted += 1
+                        files_extracted_this_archive = self._files_extracted_count + local_extracted
+                        percent = (files_extracted_this_archive / self._total_files_to_extract * 100) if self._total_files_to_extract > 0 else 0
+                        logging.info(f"[AscendaraDownloader] Recovered extraction: {files_extracted_this_archive}/{self._total_files_to_extract} files ({percent:.1f}%) - {fname}")
+                        self._update_extraction_progress(fname, files_extracted_this_archive, self._total_files_to_extract, force=True)
+                    except Exception as e:
+                        logging.warning(f"[AscendaraDownloader] Failed to re-extract {fname} after hang: {e}")
+                        extraction_error.append(e)
+                elif extract_exc:
+                    logging.warning(f"[AscendaraDownloader] Failed to extract {fname}: {extract_exc[0]}")
+                    extraction_error.append(extract_exc[0])
+                else:
+                    local_extracted += 1
+                    files_extracted_this_archive = self._files_extracted_count + local_extracted
+                    percent = (files_extracted_this_archive / self._total_files_to_extract * 100) if self._total_files_to_extract > 0 else 0
+                    logging.info(f"[AscendaraDownloader] Extraction progress: {files_extracted_this_archive}/{self._total_files_to_extract} files ({percent:.1f}%) - {fname}")
+                    self._update_extraction_progress(fname, files_extracted_this_archive, self._total_files_to_extract, force=True)
                 
-                # Update progress if files changed or every 5 seconds
-                current_time = time.time()
-                time_since_update = current_time - last_update_time
-                
-                # Force heartbeat every 5 seconds even if no files detected yet
-                if time_since_update >= 5.0:
+                # Heartbeat every 5 seconds in case a file takes a long time
+                now = time.time()
+                if now - last_heartbeat_time >= 5.0:
                     heartbeat_count += 1
-                    files_extracted_this_archive = self._files_extracted_count + newly_extracted
+                    files_extracted_this_archive = self._files_extracted_count + local_extracted
                     percent = (files_extracted_this_archive / self._total_files_to_extract * 100) if self._total_files_to_extract > 0 else 0
-                    logging.info(f"[AscendaraDownloader] Extraction heartbeat #{heartbeat_count}: {newly_extracted} files extracted so far ({percent:.1f}%)")
-                    self._update_extraction_progress(last_file_name, files_extracted_this_archive, self._total_files_to_extract, force=True)
-                    last_update_time = current_time
-                
-                # Update when new files are detected
-                if newly_extracted > last_count:
-                    files_extracted_this_archive = self._files_extracted_count + newly_extracted
-                    percent = (files_extracted_this_archive / self._total_files_to_extract * 100) if self._total_files_to_extract > 0 else 0
-                    logging.info(f"[AscendaraDownloader] Extraction progress: {files_extracted_this_archive}/{self._total_files_to_extract} files ({percent:.1f}%) - {last_file_name}")
-                    self._update_extraction_progress(last_file_name, files_extracted_this_archive, self._total_files_to_extract, force=True)
-                    last_count = newly_extracted
-                    last_update_time = current_time
-                
-                time.sleep(0.5)  # Check every 0.5 seconds
-            
-            # Wait for thread to complete fully (no timeout - must finish)
-            logging.info(f"[AscendaraDownloader] Waiting for RAR extraction thread to complete...")
-            thread.join()
-            logging.info(f"[AscendaraDownloader] RAR extraction thread completed")
+                    logging.info(f"[AscendaraDownloader] Extraction heartbeat #{heartbeat_count}: {local_extracted} files extracted so far ({percent:.1f}%) - currently: {fname}")
+                    last_heartbeat_time = now
             
             if extraction_error:
                 logging.error(f"[AscendaraDownloader] RAR extraction failed: {extraction_error[0]}")
@@ -1752,15 +1768,8 @@ class AscendaraDownloader:
             
             logging.info(f"[AscendaraDownloader] RAR extraction complete")
             
-            # Update extracted count from newly added files
-            final_file_count = 0
-            try:
-                for root, dirs, files_in_dir in os.walk(self.download_dir):
-                    final_file_count += len([f for f in files_in_dir if not f.endswith('.url') and not f.endswith('.rar') and not f.endswith('.zip')])
-            except Exception:
-                pass
-            newly_extracted = max(0, final_file_count - initial_file_count)
-            self._files_extracted_count += newly_extracted
+            # Update extracted count using the precise per-file count
+            self._files_extracted_count += local_extracted
             
             # Cap the count to never exceed total
             if self._files_extracted_count > self._total_files_to_extract:
@@ -1816,23 +1825,54 @@ class AscendaraDownloader:
             logging.info("[AscendaraDownloader] No directories to flatten")
             return
         
-        # Find the subdir that contains a .exe — that is the game's root folder
+        # Only flatten if the subdirectory name resembles the game name.
+        # Repack wrappers are typically named after the game (e.g. "Forza Horizon 6",
+        # "ForzaHorizon6"). Legitimate game subdirectories use short internal names
+        # (e.g. "FH6", "data", "bin") that don't match the game title.
+        def _name_matches_game(dirname: str) -> bool:
+            game_clean = re.sub(r'[^a-z0-9]', '', self.game.lower())
+            dir_clean  = re.sub(r'[^a-z0-9]', '', dirname.lower())
+            if not dir_clean:
+                return False
+            # Exact match after stripping punctuation/spaces
+            if game_clean == dir_clean:
+                return True
+            # Dir name is a prefix of the game name (handles truncated titles)
+            if len(dir_clean) >= 4 and game_clean.startswith(dir_clean):
+                return True
+            # Game name starts with the dir name (e.g. game="ForzaHorizon6", dir="Forza")
+            if len(dir_clean) >= 4 and dir_clean in game_clean:
+                # Only if the match covers a significant portion (≥50%) of the game name
+                if len(dir_clean) >= len(game_clean) * 0.5:
+                    return True
+            return False
+
+        # Find the subdir that contains a .exe AND whose name resembles the game name
         target_dir = None
         for subdir in subdirs:
+            subdir_name = os.path.basename(subdir)
+            if not _name_matches_game(subdir_name):
+                logging.info(f"[AscendaraDownloader] Skipping flatten candidate (name mismatch): {subdir_name}")
+                continue
             for _root, _dirs, _files in os.walk(subdir):
                 if any(f.lower().endswith('.exe') for f in _files):
                     target_dir = subdir
                     break
             if target_dir:
                 break
-        
-        # Fall back: if only one subdir exists, flatten it regardless
-        if not target_dir:
-            if len(subdirs) == 1:
+
+        # Fall back: single subdir that matches the game name, even without a .exe
+        if not target_dir and len(subdirs) == 1:
+            subdir_name = os.path.basename(subdirs[0])
+            if _name_matches_game(subdir_name):
                 target_dir = subdirs[0]
             else:
-                logging.info("[AscendaraDownloader] Multiple subdirs found, none contain a .exe — skipping flatten")
+                logging.info(f"[AscendaraDownloader] Single subdir '{subdir_name}' does not match game name — skipping flatten")
                 return
+
+        if not target_dir:
+            logging.info("[AscendaraDownloader] No flatten-eligible subdirectory found — skipping flatten")
+            return
         
         logging.info(f"[AscendaraDownloader] Flattening: {target_dir}")
         
