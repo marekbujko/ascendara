@@ -1319,6 +1319,7 @@ const DownloadCard = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showLargeFileNotice, setShowLargeFileNotice] = useState(false);
+  const [heroImage, setHeroImage] = useState(null);
   const [logDialogOpen, setLogDialogOpen] = useState(false);
   const [logContent, setLogContent] = useState("");
   const [logLoading, setLogLoading] = useState(false);
@@ -1350,6 +1351,15 @@ const DownloadCard = ({
     logPollRef.current = setInterval(fetchLog, 2000);
     return () => clearInterval(logPollRef.current);
   }, [logDialogOpen]);
+
+  useEffect(() => {
+    const gameName = game?.game;
+    if (!gameName) return;
+    window.electron.ipcRenderer
+      .invoke("get-game-image", gameName, "hero")
+      .then(b64 => { if (b64) setHeroImage(`data:image/jpeg;base64,${b64}`); })
+      .catch(() => {});
+  }, [game?.game]);
 
   const handleViewLog = () => {
     setLogLoading(true);
@@ -1619,6 +1629,20 @@ const DownloadCard = ({
               : "border-border/50 bg-gradient-to-br from-card via-card to-muted/20 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5"
       )}
     >
+      {/* Hero image background */}
+      {heroImage && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: `url(${heroImage})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            opacity: 0.18,
+            filter: "blur(1px) saturate(1.3)",
+          }}
+        />
+      )}
+
       {/* Animated background for active downloads */}
       {isDownloading && !hasError && !isStopped && !isCompleted && (
         <div className="absolute inset-0 overflow-hidden">
