@@ -1784,15 +1784,15 @@ export default function DownloadPage() {
       );
       const ddlProviders = availableProviders.filter(p => p !== "torrent");
 
-      if (ddlProviders.includes("gofile")) {
+      if (ddlProviders.includes("buzzheavier")) {
+        setSelectedProvider("buzzheavier");
+      } else if (ddlProviders.includes("gofile")) {
         setSelectedProvider("gofile");
       } else if (
         torboxService.isEnabled(settings) &&
         ddlProviders.includes("1fichier")
       ) {
         setSelectedProvider("1fichier");
-      } else if (ddlProviders.includes("buzzheavier")) {
-        setSelectedProvider("buzzheavier");
       } else if (ddlProviders.length > 0) {
         setSelectedProvider(ddlProviders[0]);
       } else if (
