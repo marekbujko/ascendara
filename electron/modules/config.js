@@ -140,7 +140,7 @@ const DEPENDENCY_REGISTRY_PATHS = {
 // ============================================================================
 
 const appBranch = "live";
-const appVersion = "10.4.6";
+const appVersion = "10.5.6";
 const testingVersion = "";
 
 module.exports = {
