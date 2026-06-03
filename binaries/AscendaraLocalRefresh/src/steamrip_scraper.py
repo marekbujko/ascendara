@@ -61,9 +61,9 @@ class SteamRIPScraper(BaseScraper):
         self.view_counts_enabled = False
         self.view_count_cache = {}
         self.view_count_cache_file = None
-        self._VIEW_COUNT_DELAY = 1.5
-        self._VIEW_COUNT_MAX_SECONDS = 300
-        self._VIEW_COUNT_429_LIMIT = 5
+        self._VIEW_COUNT_DELAY = 2.0
+        self._VIEW_COUNT_MAX_SECONDS = 600
+        self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT = 5
     
     def get_source_name(self) -> str:
         return "SteamRIP"
@@ -288,7 +288,7 @@ class SteamRIPScraper(BaseScraper):
             
             urls_to_check = [
                 ("posts API", "https://steamrip.com/wp-json/wp/v2/posts?per_page=1"),
-                ("admin-ajax", "https://steamrip.com/wp-admin/admin-ajax.php?postviews_id=1&action=tie_postviews"),
+                ("game page", "https://steamrip.com/"),
             ]
             
             for label, url in urls_to_check:
@@ -725,62 +725,105 @@ class SteamRIPScraper(BaseScraper):
         except Exception as e:
             self.logger.warning(f"Could not save view count cache: {e}")
 
+    def _extract_view_count_from_html(self, html_text):
+        """Extract view count from a SteamRIP game page's HTML.
+        The TiePedia theme renders view counts like:
+        <span class="meta-views meta-item very-hot"><span class="tie-icon-fire" ...></span> 26,374 </span>
+        Note: there may be nested <span> tags between the class and the actual number."""
+        # Pattern 1: meta-views span - may contain nested spans before the number
+        match = re.search(r'class="[^"]*meta-views[^"]*"[^>]*>(?:<[^>]*>)*\s*([\d,]+)', html_text)
+        if match:
+            return match.group(1).replace(',', '')
+        
+        # Pattern 2: tie-views span
+        match = re.search(r'class="[^"]*tie-views[^"]*"[^>]*>(?:<[^>]*>)*\s*([\d,]+)', html_text)
+        if match:
+            return match.group(1).replace(',', '')
+        
+        # Pattern 3: post-views span
+        match = re.search(r'class="[^"]*post-views[^"]*"[^>]*>(?:<[^>]*>)*\s*([\d,]+)', html_text)
+        if match:
+            return match.group(1).replace(',', '')
+        
+        # Pattern 4: "N Views" text pattern
+        match = re.search(r'>\s*([\d,]+)\s*(?:Views?|views?)\s*<', html_text)
+        if match:
+            return match.group(1).replace(',', '')
+        
+        # Pattern 5: data-views attribute
+        match = re.search(r'data-views=["\']?(\d+)', html_text)
+        if match:
+            return match.group(1)
+        
+        # Pattern 6: postviews_id in inline script with count
+        match = re.search(r'tie_postviews[^}]*?["\']count["\']\s*:\s*["\']?(\d+)', html_text)
+        if match:
+            return match.group(1)
+        
+        return None
+
     def _fetch_queued_view_counts(self, game_data: List[Dict]):
-        """Fetch view counts for uncached posts serially with a 1.5s delay between requests.
-        Stops after self._VIEW_COUNT_429_LIMIT consecutive 429s or self._VIEW_COUNT_MAX_SECONDS elapsed.
+        """Fetch view counts by scraping each game's HTML page (dirlink) instead of
+        the admin-ajax endpoint which is rate-limited and causes bans.
         Updates game_data in place and saves the cache on completion."""
-        pending = [(i, game["_post_id"]) for i, game in enumerate(game_data) if "_post_id" in game]
+        pending = [(i, game["_post_id"], game.get("dirlink", "")) 
+                   for i, game in enumerate(game_data) if "_post_id" in game]
         
         if not pending:
             self.logger.info("All view counts served from cache")
             return
         
-        self.logger.info(f"Fetching {len(pending)} view counts (1 per {self._VIEW_COUNT_DELAY}s, max {self._VIEW_COUNT_MAX_SECONDS}s)...")
+        self.logger.info(f"Fetching {len(pending)} view counts from game pages (1 per {self._VIEW_COUNT_DELAY}s, max {self._VIEW_COUNT_MAX_SECONDS}s)...")
         
-        session = requests.Session()
-        session.headers.update(self.scraper.headers)
-        session.cookies.update(self.scraper.cookies)
-        adapter = requests.adapters.HTTPAdapter(max_retries=0)
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
-        
-        consecutive_429s = 0
+        consecutive_failures = 0
         fetched = 0
         start_time = time.time()
         
-        for idx, (game_idx, post_id) in enumerate(pending):
+        for idx, (game_idx, post_id, dirlink) in enumerate(pending):
             if time.time() - start_time > self._VIEW_COUNT_MAX_SECONDS:
                 self.logger.warning(
                     f"View count time limit ({self._VIEW_COUNT_MAX_SECONDS}s) reached after {fetched} fetches - saving and stopping"
                 )
                 break
             
+            if not dirlink:
+                self.logger.debug(f"No dirlink for post {post_id}, skipping view count")
+                continue
+            
             try:
-                url = f"https://steamrip.com/wp-admin/admin-ajax.php?postviews_id={post_id}&action=tie_postviews&_={int(time.time() * 1000)}"
-                response = session.get(url, timeout=(5, 8))
+                response = self.scraper.get(dirlink, timeout=15)
                 
                 if response.status_code == 200:
-                    consecutive_429s = 0
-                    views = re.sub(r'[^\d]', '', response.text.strip())
+                    consecutive_failures = 0
+                    views = self._extract_view_count_from_html(response.text)
                     if views:
                         game_data[game_idx]["weight"] = views
                         self.view_count_cache[str(post_id)] = views
-                    fetched += 1
-                    if fetched % 50 == 0:
+                        fetched += 1
+                    else:
+                        self.logger.debug(f"Could not find view count in HTML for post {post_id}")
+                    
+                    if fetched % 50 == 0 and fetched > 0:
                         self.logger.info(f"View counts fetched: {fetched}/{len(pending)}")
                         self._save_view_count_cache()
                 
-                elif response.status_code == 429:
-                    consecutive_429s += 1
-                    self.logger.debug(f"429 on post {post_id} ({consecutive_429s}/{self._VIEW_COUNT_429_LIMIT})")
-                    if consecutive_429s >= self._VIEW_COUNT_429_LIMIT:
+                elif response.status_code in (429, 403):
+                    consecutive_failures += 1
+                    self.logger.debug(f"{response.status_code} on {dirlink} ({consecutive_failures}/{self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT})")
+                    if consecutive_failures >= self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT:
                         self.logger.warning(
-                            f"View count endpoint rate-limited ({consecutive_429s} consecutive 429s) - stopping"
+                            f"View count page fetching rate-limited ({consecutive_failures} consecutive failures) - stopping"
                         )
                         break
+                else:
+                    self.logger.debug(f"Unexpected status {response.status_code} for {dirlink}")
             
             except Exception as e:
-                self.logger.debug(f"View count request failed for post {post_id}: {e}")
+                consecutive_failures += 1
+                self.logger.debug(f"View count page request failed for post {post_id}: {e}")
+                if consecutive_failures >= self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT:
+                    self.logger.warning(f"Too many consecutive failures fetching view counts - stopping")
+                    break
             
             if idx < len(pending) - 1:
                 time.sleep(self._VIEW_COUNT_DELAY)
@@ -790,7 +833,6 @@ class SteamRIPScraper(BaseScraper):
         
         self.logger.info(f"View count fetching complete: {fetched} new, {len(self.view_count_cache)} total cached")
         self._save_view_count_cache()
-        session.close()
     
     def _wait_for_cookie_refresh(self):
         """Wait for user to provide a new cookie via stdin"""
