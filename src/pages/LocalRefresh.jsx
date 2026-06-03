@@ -1835,7 +1835,7 @@ const LocalRefresh = () => {
           </div>
         </div>
         <div className="space-y-4">
-            <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 p-0 shadow-md ring-1 ring-border/60">
+            <Card className="relative overflow-hidden border-none bg-gradient-to-br from-card to-card/50 p-0 shadow-md">
               <div
                 className={`absolute inset-x-0 top-0 h-24 opacity-50 ${
                   customSourcesMode
@@ -1846,7 +1846,7 @@ const LocalRefresh = () => {
               <div className="relative p-6">
                 <div className="flex items-start gap-4">
                   <div
-                    className={`flex h-14 w-14 mt-2 shrink-0 items-center justify-center rounded-2xl shadow-sm ${
+                    className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-sm ${
                       customSourcesMode
                         ? "bg-gradient-to-br from-purple-500 to-pink-500 text-white"
                         : "bg-gradient-to-br from-primary to-blue-500 text-white"
@@ -1860,7 +1860,7 @@ const LocalRefresh = () => {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="truncate text-xl mt-2 font-bold leading-tight">
+                      <h2 className="truncate text-xl font-bold leading-tight">
                         {customSourcesMode
                           ? activeCustomList?.name || customSource?.name ||
                             t("localRefresh.noSourceSelected") ||
@@ -2015,17 +2015,7 @@ const LocalRefresh = () => {
 
                 {/* Primary action bar */}
                 <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  {isRefreshing ? (
-                    <Button
-                      variant="destructive"
-                      size="lg"
-                      onClick={() => setShowStopDialog(true)}
-                      className="gap-2"
-                    >
-                      <StopCircle className="h-4 w-4" />
-                      {t("localRefresh.stop") || "Stop"}
-                    </Button>
-                  ) : isUploading ? (
+                  {isRefreshing ? null : isUploading ? (
                     <Button size="lg" disabled className="gap-2">
                       <Loader className="h-4 w-4 animate-spin" />
                       {t("localRefresh.sharing") || "Sharing..."}
@@ -2143,6 +2133,111 @@ const LocalRefresh = () => {
                     </>
                   )}
                 </div>
+
+
+            <AnimatePresence>
+              {(isRefreshing || isUploading || refreshStatus === "completed") && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                >
+                  <Card className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-semibold">
+                          {isUploading
+                            ? t("localRefresh.sharing") || "Sharing..."
+                            : refreshStatus === "completed"
+                              ? t("localRefresh.statusCompleted") || "Complete"
+                              : t("localRefresh.progress") || "Progress"}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {isUploading ? null : currentPhase ===
+                            "waiting_for_cookie" ? (
+                            <span className="font-medium text-orange-500">
+                              {t("localRefresh.waitingForCookieShort") ||
+                                "Waiting..."}
+                            </span>
+                          ) : !(
+                              currentPhase === "fetching_posts" ||
+                              currentPhase === "fetching_categories" ||
+                              currentPhase === "initializing" ||
+                              currentPhase === "starting"
+                            ) ? (
+                            <span className="font-semibold">
+                              {isRefreshing ? `${Math.round(progress)}%` : null}
+                            </span>
+                          ) : null}
+                          {isRefreshing && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setShowStopDialog(true)}
+                              className="h-7 gap-1.5 px-2 text-xs"
+                            >
+                              <StopCircle className="h-3.5 w-3.5" />
+                              {t("localRefresh.stop") || "Stop"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {isUploading ? (
+                        <div className="relative h-2 w-full overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900/30">
+                          <div
+                            className="absolute h-full rounded-full bg-blue-500"
+                            style={{
+                              animation:
+                                "progress-loading 1.5s ease-in-out infinite",
+                            }}
+                          />
+                        </div>
+                      ) : currentPhase === "waiting_for_cookie" ? (
+                        <div className="relative h-2 w-full overflow-hidden rounded-full bg-orange-200 dark:bg-orange-900/30">
+                          <div
+                            className="absolute h-full rounded-full bg-orange-500"
+                            style={{
+                              animation:
+                                "progress-loading 2s ease-in-out infinite",
+                            }}
+                          />
+                        </div>
+                      ) : (currentPhase === "fetching_posts" ||
+                          currentPhase === "fetching_categories" ||
+                          currentPhase === "initializing" ||
+                          currentPhase === "starting") &&
+                        isRefreshing ? (
+                        <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
+                          <div
+                            className="absolute h-full rounded-full bg-primary"
+                            style={{
+                              animation:
+                                "progress-loading 1.5s ease-in-out infinite",
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <Progress value={progress} className="h-2" />
+                      )}
+                      {currentPhase === "processing_posts" &&
+                        totalGames > 0 &&
+                        !isUploading && (
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>
+                              {t("localRefresh.gamesProcessed") || "Games"}
+                            </span>
+                            <span className="font-semibold text-foreground">
+                              {processedGames.toLocaleString()} /{" "}
+                              {totalGames.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                    </div>
+                  </Card>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
 
                 {/* Contextual hint / status line */}
                 {(currentStep || uploadError || refreshStatus === "error") && (
@@ -2748,97 +2843,6 @@ const LocalRefresh = () => {
               </div>
             </Card>
             )}
-
-            <AnimatePresence>
-              {(isRefreshing || isUploading || refreshStatus === "completed") && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <Card className="p-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-semibold">
-                          {isUploading
-                            ? t("localRefresh.sharing") || "Sharing..."
-                            : refreshStatus === "completed"
-                              ? t("localRefresh.statusCompleted") || "Complete"
-                              : t("localRefresh.progress") || "Progress"}
-                        </span>
-                        {isUploading ? null : currentPhase ===
-                          "waiting_for_cookie" ? (
-                          <span className="font-medium text-orange-500">
-                            {t("localRefresh.waitingForCookieShort") ||
-                              "Waiting..."}
-                          </span>
-                        ) : !(
-                            currentPhase === "fetching_posts" ||
-                            currentPhase === "fetching_categories" ||
-                            currentPhase === "initializing" ||
-                            currentPhase === "starting"
-                          ) ? (
-                          <span className="font-semibold">
-                            {Math.round(progress)}%
-                          </span>
-                        ) : null}
-                      </div>
-                      {isUploading ? (
-                        <div className="relative h-2 w-full overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900/30">
-                          <div
-                            className="absolute h-full rounded-full bg-blue-500"
-                            style={{
-                              animation:
-                                "progress-loading 1.5s ease-in-out infinite",
-                            }}
-                          />
-                        </div>
-                      ) : currentPhase === "waiting_for_cookie" ? (
-                        <div className="relative h-2 w-full overflow-hidden rounded-full bg-orange-200 dark:bg-orange-900/30">
-                          <div
-                            className="absolute h-full rounded-full bg-orange-500"
-                            style={{
-                              animation:
-                                "progress-loading 2s ease-in-out infinite",
-                            }}
-                          />
-                        </div>
-                      ) : (currentPhase === "fetching_posts" ||
-                          currentPhase === "fetching_categories" ||
-                          currentPhase === "initializing" ||
-                          currentPhase === "starting") &&
-                        isRefreshing ? (
-                        <div className="relative h-2 w-full overflow-hidden rounded-full bg-secondary">
-                          <div
-                            className="absolute h-full rounded-full bg-primary"
-                            style={{
-                              animation:
-                                "progress-loading 1.5s ease-in-out infinite",
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <Progress value={progress} className="h-2" />
-                      )}
-                      {currentPhase === "processing_posts" &&
-                        totalGames > 0 &&
-                        !isUploading && (
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>
-                              {t("localRefresh.gamesProcessed") || "Games"}
-                            </span>
-                            <span className="font-semibold text-foreground">
-                              {processedGames.toLocaleString()} /{" "}
-                              {totalGames.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
-                    </div>
-                  </Card>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             <AnimatePresence>
               {errors.length > 0 && (
                 <motion.div
@@ -2890,7 +2894,7 @@ const LocalRefresh = () => {
               )}
             </AnimatePresence>
 
-            <Accordion type="single" collapsible className="rounded-lg border border-border bg-card">
+            <Accordion type="single" collapsible className="rounded-lg border border-none bg-card">
               <AccordionItem value="advanced" className="border-b-0 px-4">
                 <AccordionTrigger className="py-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
