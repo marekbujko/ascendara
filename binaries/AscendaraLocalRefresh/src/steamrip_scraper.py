@@ -762,9 +762,9 @@ class SteamRIPScraper(BaseScraper):
         
         return None
 
-    def _fetch_queued_view_counts(self, game_data: List[Dict]):
-        """Fetch view counts by scraping each game's HTML page (dirlink) instead of
-        the admin-ajax endpoint which is rate-limited and causes bans.
+    def _fetch_queued_view_counts(self, game_data: List[Dict], workers: int = 6):
+        """Fetch view counts by scraping each game's HTML page (dirlink) in parallel.
+        Uses a thread pool to avoid the ~2h serial wait for thousands of games.
         Updates game_data in place and saves the cache on completion."""
         pending = [(i, game["_post_id"], game.get("dirlink", "")) 
                    for i, game in enumerate(game_data) if "_post_id" in game]
@@ -773,65 +773,81 @@ class SteamRIPScraper(BaseScraper):
             self.logger.info("All view counts served from cache")
             return
         
-        self.logger.info(f"Fetching {len(pending)} view counts from game pages (1 per {self._VIEW_COUNT_DELAY}s, max {self._VIEW_COUNT_MAX_SECONDS}s)...")
+        self.logger.info(f"Fetching {len(pending)} view counts from game pages ({workers} workers, max {self._VIEW_COUNT_MAX_SECONDS}s)...")
         
-        consecutive_failures = 0
-        fetched = 0
+        lock = threading.Lock()
+        state = {"fetched": 0, "consecutive_failures": 0, "stop": False}
         start_time = time.time()
         
-        for idx, (game_idx, post_id, dirlink) in enumerate(pending):
+        def fetch_one(game_idx, post_id, dirlink):
+            if state["stop"]:
+                return
             if time.time() - start_time > self._VIEW_COUNT_MAX_SECONDS:
-                self.logger.warning(
-                    f"View count time limit ({self._VIEW_COUNT_MAX_SECONDS}s) reached after {fetched} fetches - saving and stopping"
-                )
-                break
+                with lock:
+                    if not state["stop"]:
+                        state["stop"] = True
+                        self.logger.warning(
+                            f"View count time limit ({self._VIEW_COUNT_MAX_SECONDS}s) reached after {state['fetched']} fetches - stopping"
+                        )
+                return
             
             if not dirlink:
-                self.logger.debug(f"No dirlink for post {post_id}, skipping view count")
-                continue
+                return
             
             try:
                 response = self.scraper.get(dirlink, timeout=15)
                 
                 if response.status_code == 200:
-                    consecutive_failures = 0
+                    with lock:
+                        state["consecutive_failures"] = 0
                     views = self._extract_view_count_from_html(response.text)
                     if views:
-                        game_data[game_idx]["weight"] = views
-                        self.view_count_cache[str(post_id)] = views
-                        fetched += 1
-                    else:
-                        self.logger.debug(f"Could not find view count in HTML for post {post_id}")
-                    
-                    if fetched % 50 == 0 and fetched > 0:
-                        self.logger.info(f"View counts fetched: {fetched}/{len(pending)}")
-                        self._save_view_count_cache()
+                        with lock:
+                            game_data[game_idx]["weight"] = views
+                            self.view_count_cache[str(post_id)] = views
+                            state["fetched"] += 1
+                            if state["fetched"] % 100 == 0:
+                                self.logger.info(f"View counts fetched: {state['fetched']}/{len(pending)}")
+                                self._save_view_count_cache()
                 
                 elif response.status_code in (429, 403):
-                    consecutive_failures += 1
-                    self.logger.debug(f"{response.status_code} on {dirlink} ({consecutive_failures}/{self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT})")
-                    if consecutive_failures >= self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT:
-                        self.logger.warning(
-                            f"View count page fetching rate-limited ({consecutive_failures} consecutive failures) - stopping"
-                        )
-                        break
-                else:
-                    self.logger.debug(f"Unexpected status {response.status_code} for {dirlink}")
-            
+                    with lock:
+                        state["consecutive_failures"] += 1
+                        if state["consecutive_failures"] >= self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT:
+                            state["stop"] = True
+                            self.logger.warning(
+                                f"View count fetching rate-limited ({state['consecutive_failures']} consecutive failures) - stopping"
+                            )
+                
             except Exception as e:
-                consecutive_failures += 1
-                self.logger.debug(f"View count page request failed for post {post_id}: {e}")
-                if consecutive_failures >= self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT:
-                    self.logger.warning(f"Too many consecutive failures fetching view counts - stopping")
+                with lock:
+                    state["consecutive_failures"] += 1
+                    if state["consecutive_failures"] >= self._VIEW_COUNT_CONSECUTIVE_FAIL_LIMIT:
+                        state["stop"] = True
+                        self.logger.warning(f"Too many consecutive failures fetching view counts - stopping")
+        
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {}
+            for game_idx, post_id, dirlink in pending:
+                if state["stop"]:
                     break
+                futures[executor.submit(fetch_one, game_idx, post_id, dirlink)] = post_id
+                time.sleep(0.15)
             
-            if idx < len(pending) - 1:
-                time.sleep(self._VIEW_COUNT_DELAY)
+            for future in as_completed(futures):
+                if state["stop"]:
+                    for f in futures:
+                        f.cancel()
+                    break
+                try:
+                    future.result()
+                except Exception:
+                    pass
         
         for game in game_data:
             game.pop("_post_id", None)
         
-        self.logger.info(f"View count fetching complete: {fetched} new, {len(self.view_count_cache)} total cached")
+        self.logger.info(f"View count fetching complete: {state['fetched']} new, {len(self.view_count_cache)} total cached")
         self._save_view_count_cache()
     
     def _wait_for_cookie_refresh(self):
