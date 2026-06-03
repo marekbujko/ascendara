@@ -36,6 +36,11 @@ import {
   Users,
   TrendingUp,
   HardDrive,
+  ShieldCheck,
+  Check,
+  Info,
+  ArrowUpFromLine,
+  Download,
 } from "lucide-react";
 import gameService from "@/services/gameService";
 import {
@@ -54,8 +59,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useNavigate, useLocation } from "react-router-dom";
 import imageCacheService from "@/services/imageCacheService";
-import { formatLatestUpdate } from "@/lib/utils";
+import { formatLatestUpdate, sanitizeText } from "@/lib/utils";
 import verifiedGamesService from "@/services/verifiedGamesService";
+import installedGamesService from "@/services/installedGamesService";
+import { useImageLoader } from "@/hooks/useImageLoader";
 
 // Module-level cache with timestamp
 let gamesCache = {
@@ -248,6 +255,7 @@ const Search = memo(() => {
   const [displayedGames, setDisplayedGames] = useState([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [featuredGameId, setFeaturedGameId] = useState(null);
   const loaderRef = useRef(null);
   const scrollThreshold = 200;
   const gamesPerLoad = useWindowSize();
@@ -426,6 +434,14 @@ const Search = memo(() => {
     },
     [isCacheValid]
   );
+
+  // Fetch featured game ID from API
+  useEffect(() => {
+    fetch("https://api.ascendara.app/json/featured-game")
+      .then(res => res.json())
+      .then(data => { if (data?.gameId) setFeaturedGameId(data.gameId); })
+      .catch(() => {});
+  }, []);
 
   // Load games on mount - single effect to avoid duplicate loading
   useEffect(() => {
@@ -1385,6 +1401,7 @@ const Search = memo(() => {
                   debouncedSearchQuery={debouncedSearchQuery}
                   handleDownload={handleDownload}
                   handleContextMenu={handleContextMenu}
+                  featuredGameId={featuredGameId}
                 />
                 {hasMore && (
                   <div ref={loaderRef} className="flex justify-center py-8">
@@ -1461,13 +1478,191 @@ const MemoizedGameCard = memo(({ game, onDownload, onContextMenu }) => (
   return prevProps.game === nextProps.game && prevProps.onDownload === nextProps.onDownload && prevProps.onContextMenu === nextProps.onContextMenu;
 });
 
+// Featured game card — spans 2 columns with larger image and description
+const FeaturedGameCard = memo(({ game, onDownload, onContextMenu }) => {
+  const navigate = useNavigate();
+  const { cachedImage, loading } = useImageLoader(game?.imgID, {
+    quality: "high",
+    priority: "high",
+    enabled: !!game?.imgID,
+  });
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [needsUpdate, setNeedsUpdate] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
+  const isMounted = useRef(true);
+  const { t } = useLanguage();
+
+  useEffect(() => {
+    installedGamesService
+      .checkGameStatus(game.game, game.version)
+      .then(({ isInstalled: inst, needsUpdate: upd }) => {
+        if (isMounted.current) { setIsInstalled(inst); setNeedsUpdate(upd); }
+      })
+      .catch(() => {});
+    return () => { isMounted.current = false; };
+  }, [game.game, game.version]);
+
+  useEffect(() => {
+    if (!game?.gameID) return;
+    verifiedGamesService.loadVerifiedGames().then(() => {
+      if (isMounted.current) setIsVerified(verifiedGamesService.isVerified(game.gameID));
+    });
+  }, [game?.gameID]);
+
+  const handleClick = useCallback(() => {
+    navigate("/download", { state: { gameData: { ...game, download_links: game.download_links || {}, isUpdating: needsUpdate } } });
+  }, [navigate, game, needsUpdate]);
+
+  const handleDownloadClick = useCallback(e => {
+    e?.stopPropagation();
+    onDownload?.();
+  }, [onDownload]);
+
+  const gameCategories = Array.isArray(game.category) ? game.category.slice(0, 4) : [];
+
+  return (
+    <div
+      className="col-span-1 md:col-span-2 cursor-pointer group relative overflow-hidden rounded-xl border-none bg-card transition-all duration-300 animate-in fade-in-50 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/15"
+      style={{ minHeight: "380px" }}
+      onClick={handleClick}
+      onContextMenu={e => onContextMenu?.(e, game)}
+      data-game-name={game.game}
+    >
+      {/* Full-bleed background image */}
+      {loading && !cachedImage && (
+        <div className="absolute inset-0 animate-pulse bg-muted rounded-xl" />
+      )}
+      {cachedImage && (
+        <img
+          src={cachedImage}
+          alt={game.game}
+          className="absolute inset-0 h-full w-full object-cover transition-all duration-500 group-hover:scale-105 rounded-xl"
+        />
+      )}
+
+      {/* Gradient overlays */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent rounded-xl" />
+      <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent rounded-xl" />
+
+      {/* Top: Featured badge + status */}
+      <div className="absolute left-0 right-0 top-0 flex items-start justify-between p-4">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-full bg-primary/90 px-3 py-1 backdrop-blur-sm animate-in fade-in-50 slide-in-from-left-3">
+            <Sparkles className="h-3.5 w-3.5 text-white" />
+            <span className="text-xs font-bold uppercase tracking-wider text-white">{t("gameCard.highlighted")}</span>
+          </div>
+          {isVerified && (
+            <div
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-primary via-primary/90 to-primary/80"
+              style={{ boxShadow: "0 0 15px rgba(59,130,246,0.6)" }}
+            >
+              <ShieldCheck className="h-4 w-4 text-white" />
+            </div>
+          )}
+        </div>
+        {(isInstalled || needsUpdate) && (
+          <div className={`rounded-full px-2.5 py-1 backdrop-blur-sm text-xs font-semibold text-white ${
+            needsUpdate ? "bg-amber-500/90" : "bg-green-500/90"
+          }`}>
+            {needsUpdate ? t("gameCard.updateAvailable") : t("gameCard.installed")}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom: title, meta, categories, button — all overlaid */}
+      <div className="absolute bottom-0 left-0 right-0 p-5">
+        <h2 className="mb-1 text-2xl font-bold leading-tight text-white drop-shadow-lg">
+          {sanitizeText(game.game)}
+        </h2>
+
+        {/* Meta row */}
+        <div className="mb-3 flex items-center gap-3 text-xs text-white/70">
+          {game.size && (
+            <span className="flex items-center gap-1">
+              <Download className="h-3 w-3" />
+              {game.size}
+            </span>
+          )}
+          {game.version && <span>v{game.version}</span>}
+          {game.latest_update && (
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {formatLatestUpdate(game.latest_update)}
+            </span>
+          )}
+        </div>
+
+        {/* Categories + DLC/Online badges */}
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          {gameCategories.map(cat => (
+            <span
+              key={cat}
+              className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs text-white/90 backdrop-blur-sm"
+            >
+              {cat}
+            </span>
+          ))}
+          {game.dlc && (
+            <span className="flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-xs text-white/90 backdrop-blur-sm">
+              <Gift className="h-3 w-3" />
+              {t("gameCard.dlcTooltip")}
+            </span>
+          )}
+          {game.online && (
+            <span className="flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-0.5 text-xs text-white/90 backdrop-blur-sm">
+              <Gamepad2 className="h-3 w-3" />
+              {t("gameCard.onlineTooltip")}
+            </span>
+          )}
+        </div>
+
+        {/* Button */}
+        <div onClick={e => e.stopPropagation()}>
+          <Button
+            className={`gap-2 font-semibold shadow-lg transition-all duration-200 ${
+              needsUpdate
+                ? "bg-amber-500 text-white hover:bg-amber-600"
+                : isInstalled
+                  ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                  : "bg-primary text-secondary hover:bg-primary/90"
+            }`}
+            variant={needsUpdate ? "default" : isInstalled ? "secondary" : "default"}
+            onClick={handleDownloadClick}
+            disabled={isInstalled && !needsUpdate}
+          >
+            {isInstalled && !needsUpdate && <Check className="h-4 w-4" />}
+            {!isInstalled && !needsUpdate && <Info className="h-4 w-4" />}
+            {needsUpdate && <ArrowUpFromLine className="h-4 w-4" />}
+            <span>
+              {needsUpdate ? t("gameCard.update") : isInstalled ? t("gameCard.installed") : t("gameCard.viewDetails")}
+            </span>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 // Memoized game grid component to prevent re-renders on search input
 const GameGrid = memo(({ 
   displayedGames, 
   debouncedSearchQuery, 
   handleDownload,
-  handleContextMenu
+  handleContextMenu,
+  featuredGameId,
 }) => {
+  // Identify featured game (only show when not searching)
+  const isSearching = !!debouncedSearchQuery?.trim();
+  const featuredGame = useMemo(() => {
+    if (isSearching || !featuredGameId) return null;
+    return displayedGames.find(g => g.gameID === featuredGameId) || null;
+  }, [displayedGames, featuredGameId, isSearching]);
+
+  const regularGames = useMemo(() => {
+    if (!featuredGame) return displayedGames;
+    return displayedGames.filter(g => g !== featuredGame);
+  }, [displayedGames, featuredGame]);
+
   // Create stable callback references for each game
   const downloadCallbacks = useMemo(() => {
     const callbacks = new Map();
@@ -1480,10 +1675,19 @@ const GameGrid = memo(({
     return callbacks;
   }, [displayedGames, handleDownload]);
 
+  const featuredKey = featuredGame ? (featuredGame.imgID || featuredGame.id || `${featuredGame.game}-${featuredGame.version}`) : null;
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {displayedGames.map((game) => {
+      {featuredGame && (
+        <FeaturedGameCard
+          key={featuredKey + "-featured"}
+          game={featuredGame}
+          onDownload={downloadCallbacks.get(featuredKey)}
+          onContextMenu={handleContextMenu}
+        />
+      )}
+      {regularGames.map((game) => {
         const key = game.imgID || game.id || `${game.game}-${game.version}`;
 
         return (

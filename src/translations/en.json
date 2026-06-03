@@ -1387,6 +1387,7 @@
   },
   "gameCard": {
     "addedToPlayLater": "Added to Play Later",
+    "highlighted": "HIGHLIGHTED GAME",
     "addToPlayLater": "Add to Play Later",
     "addToPlayLaterDescription": "Save for later",
     "dlcTooltip": "ALL DLCs Included",
