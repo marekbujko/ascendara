@@ -1564,6 +1564,8 @@ export const updateAscendSubscription = async subscriptionData => {
         customerId: subscriptionData.customerId,
         expiresAt: Timestamp.fromMillis(subscriptionData.currentPeriodEnd * 1000),
         cancelAtPeriodEnd: subscriptionData.cancelAtPeriodEnd || false,
+        intervalCount: subscriptionData.intervalCount || 1,
+        lifetime: subscriptionData.lifetime === true,
         updatedAt: serverTimestamp(),
       },
     });

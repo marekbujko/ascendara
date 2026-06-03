@@ -284,6 +284,8 @@ const Ascend = () => {
   });
   const [verifyingAccess, setVerifyingAccess] = useState(true);
   const [showSubscriptionSuccess, setShowSubscriptionSuccess] = useState(false);
+  // Subscription tier info from API (more reliable than Firestore data)
+  const [subscriptionTierInfo, setSubscriptionTierInfo] = useState(null);
 
   // Developer mode state
   const [isDev, setIsDev] = useState(false);
