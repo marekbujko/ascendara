@@ -304,9 +304,9 @@ const GameCard = memo(function GameCard({ game, compact }) {
             handleCardClick();
           }
         }}
-        className="group relative flex min-h-[380px] cursor-pointer flex-col overflow-hidden border-none bg-card transition-all duration-300 animate-in fade-in-50 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/10"
+        className="group relative flex h-[420px] cursor-pointer flex-col justify-between overflow-hidden border-none bg-card transition-all duration-300 animate-in fade-in-50 hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/10"
       >
-        <CardContent className="flex-1 p-0">
+        <CardContent className="p-0">
           {/* Image Section */}
           <div className="relative overflow-hidden rounded-t-lg">
             <AspectRatio ratio={16 / 9} className="overflow-hidden rounded-t-lg">
@@ -405,7 +405,7 @@ const GameCard = memo(function GameCard({ game, compact }) {
           </div>
 
           {/* Content Section */}
-          <div className="space-y-2.5 p-4">
+          <div className="flex flex-col space-y-2.5 p-4 flex-grow overflow-y-auto">
             {/* Categories + DLC/Online pills */}
             <div className="flex flex-wrap gap-1.5">
               {game.dlc && (
