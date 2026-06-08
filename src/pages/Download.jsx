@@ -348,6 +348,15 @@ export default function DownloadPage() {
   const [showVerifiedDialog, setShowVerifiedDialog] = useState(false);
   const [torboxDisabledForSession, setTorboxDisabledForSession] = useState(false);
   const [isExternalSourcesMode, setIsExternalSourcesMode] = useState(false);
+  const [antivirusWarningDismissed, setAntivirusWarningDismissed] = useState(false);
+
+  // Load antivirus warning dismissed state from localStorage
+  useEffect(() => {
+    const dismissed = localStorage.getItem("antivirusWarningDismissed");
+    if (dismissed === "true") {
+      setAntivirusWarningDismissed(true);
+    }
+  }, []);
 
   // Fetch rating from new API when using local index
   useEffect(() => {
@@ -1955,6 +1964,50 @@ export default function DownloadPage() {
                           </TooltipProvider>
                         )}
                       </h1>
+
+                      {/* Antivirus Warning for Online Games */}
+                      {gameData.online && !settings.excludeFolders && !antivirusWarningDismissed && (
+                        <div className="mt-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
+                            <div className="flex-1">
+                              <p className="text-xs text-yellow-600/90">
+                                <span className="font-medium">{t("download.antivirusWarning")}:</span>{" "}
+                                {t("download.antivirusWarningDesc")}
+                              </p>
+                              <div className="mt-1.5 flex gap-3">
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const result = await window.electron.folderExclusion(true);
+                                      if (result && result.success) {
+                                        setSettings(prev => ({ ...prev, excludeFolders: true }));
+                                        toast.success("Protection enabled");
+                                      } else {
+                                        toast.error(result?.error || "Failed to enable");
+                                      }
+                                    } catch (error) {
+                                      toast.error("Failed to enable protection");
+                                    }
+                                  }}
+                                  className="text-xs font-medium text-yellow-700 hover:text-yellow-800 underline"
+                                >
+                                  {t("download.enableProtection")}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setAntivirusWarningDismissed(true);
+                                    localStorage.setItem("antivirusWarningDismissed", "true");
+                                  }}
+                                  className="text-xs text-yellow-600/60 hover:text-yellow-600"
+                                >
+                                  {t("download.dontShowAgain")}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Version + Tags Row */}
                       <div className="mt-2 flex flex-wrap items-center gap-2">
