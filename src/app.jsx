@@ -365,6 +365,15 @@ const AutomaticIndexRefresher = () => {
     };
   }, [isRefreshing, refreshProgress, refreshPhase]);
 
+  // Reset global state on mount to prevent stale data from previous sessions
+  useEffect(() => {
+    window.autoRefreshState = {
+      isRefreshing: false,
+      progress: 0,
+      phase: "",
+    };
+  }, []);
+
   // Check if automatic refresh should run
   useEffect(() => {
     const checkAndStartAutoRefresh = async () => {
@@ -519,15 +528,6 @@ const AutomaticIndexRefresher = () => {
       window.electron.onPublicIndexDownloadProgress(handleSharedIndexProgress);
       window.electron.onPublicIndexDownloadComplete(handleSharedIndexComplete);
       window.electron.onPublicIndexDownloadError(handleSharedIndexError);
-
-      return () => {
-        window.electron.offLocalRefreshProgress?.();
-        window.electron.offLocalRefreshComplete?.();
-        window.electron.offLocalRefreshError?.();
-        window.electron.offPublicIndexDownloadProgress?.();
-        window.electron.offPublicIndexDownloadComplete?.();
-        window.electron.offPublicIndexDownloadError?.();
-      };
     }
   }, []);
 
