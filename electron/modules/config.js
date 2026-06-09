@@ -46,9 +46,11 @@ const STEAM_INSTALL_PATHS = isLinux
   : [];
 
 // File paths
-const TIMESTAMP_FILE = !isWindows
-  ? path.join(os.homedir(), "timestamp.ascendara.json")
-  : path.join(process.env.USERPROFILE, "timestamp.ascendara.json");
+const TIMESTAMP_FILE = isWindows
+  ? path.join(process.env.USERPROFILE, "timestamp.ascendara.json")
+  : isLinux
+    ? path.join(os.homedir(), ".ascendara", "timestamp.ascendara.json")
+    : path.join(os.homedir(), "timestamp.ascendara.json");
 
 const LANG_DIR = isWindows
   ? path.join(process.env.LOCALAPPDATA, "Ascendara", "languages")

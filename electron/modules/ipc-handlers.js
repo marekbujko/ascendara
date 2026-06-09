@@ -13,6 +13,7 @@ const { ipcMain, shell, dialog, app, BrowserWindow, Notification } = require("el
 const {
   isDev,
   isWindows,
+  isLinux,
   appDirectory,
   APIKEY,
   analyticsAPI,
@@ -1331,6 +1332,19 @@ function registerMiscHandlers() {
       fs.accessSync(TIMESTAMP_FILE);
       return false;
     } catch (error) {
+      // Migrate old timestamp location on Linux (~/timestamp.ascendara.json -> ~/.ascendara/timestamp.ascendara.json)
+      if (isLinux) {
+        const oldPath = path.join(os.homedir(), "timestamp.ascendara.json");
+        if (fs.existsSync(oldPath)) {
+          try {
+            fs.ensureDirSync(path.dirname(TIMESTAMP_FILE));
+            fs.moveSync(oldPath, TIMESTAMP_FILE, { overwrite: true });
+            return false;
+          } catch (migrationErr) {
+            console.error("Failed to migrate timestamp file:", migrationErr);
+          }
+        }
+      }
       return true;
     }
   });
@@ -1359,6 +1373,7 @@ function registerMiscHandlers() {
         timestamp.timestamp = existingData.timestamp;
       }
 
+      fs.ensureDirSync(path.dirname(TIMESTAMP_FILE));
       fs.writeFileSync(TIMESTAMP_FILE, JSON.stringify(timestamp, null, 2));
       return true;
     } catch (error) {
@@ -1383,6 +1398,7 @@ function registerMiscHandlers() {
       timestamp: Date.now(),
       v7: true,
     };
+    fs.ensureDirSync(path.dirname(TIMESTAMP_FILE));
     fs.writeFileSync(TIMESTAMP_FILE, JSON.stringify(timestamp, null, 2));
   });
 
