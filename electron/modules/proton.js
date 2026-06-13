@@ -18,7 +18,7 @@ const {
 } = require("./config");
 const { getSettingsManager } = require("./settings");
 
-// ─── Helpers ──────────────────────────────────────────────
+// Helpers
 
 /**
  * Sanitize a game name for use as a folder name
@@ -58,7 +58,7 @@ function isUmuInstalled() {
   return fs.existsSync(linuxUmuBin);
 }
 
-// ─── Directory Setup ──────────────────────────────────────
+// Directory Setup
 
 /**
  * Ensure all Linux-specific directories exist.
@@ -79,7 +79,7 @@ function ensureLinuxDirectories() {
   console.log("[Proton] Linux directories ensured:", linuxConfigDir);
 }
 
-// ─── Proton Detection ─────────────────────────────────────
+// Proton Detection
 
 /**
  * Scan for installed Proton versions in Steam directories and custom runners.
@@ -146,12 +146,12 @@ async function detectInstalledProtons() {
     }
   }
 
-  // Sort: Proton GE first, then by version desc
+  // Sort: Cachy Proton first, then by version desc
   protons.sort((a, b) => {
-    const aIsGE = a.name.toLowerCase().includes("ge");
-    const bIsGE = b.name.toLowerCase().includes("ge");
-    if (aIsGE && !bIsGE) return -1;
-    if (!aIsGE && bIsGE) return 1;
+    const aIsCachy = a.name.toLowerCase().includes("cachyos");
+    const bIsCachy = b.name.toLowerCase().includes("cachyos");
+    if (aIsCachy && !bIsCachy) return -1;
+    if (!aIsCachy && bIsCachy) return 1;
     return b.version.localeCompare(a.version, undefined, { numeric: true });
   });
 
@@ -196,7 +196,7 @@ async function getAllRunners() {
   return runners;
 }
 
-// ─── UMU Proton Download ──────────────────────────────────
+// UMU Proton Download
 /**
  * Fetch info about the latest UMU-Proton release (Open-Wine-Components)
  */
@@ -632,7 +632,239 @@ async function downloadUmuLauncher(parentWindow) {
   }
 }
 
-// ─── Proton GE Download ───────────────────────────────────
+// Proton CachyOS
+
+async function getProtonCachyOSInfo() {
+  try {
+    const releaseRes = await fetch(
+      "https://api.github.com/repos/CachyOS/proton-cachyos/releases/latest",
+      { headers: { "User-Agent": "Ascendara-Launcher" } }
+    );
+    if (!releaseRes.ok) throw new Error(`GitHub API returned ${releaseRes.status}`);
+
+    const release = await releaseRes.json();
+    const tagName = release.tag_name;
+
+    const tarAsset = release.assets.find(a => {
+      const n = a.name;
+      return (n.endsWith(".tar.xz") || n.endsWith(".tar.gz"))
+        && n.includes("x86_64")
+        && !n.includes("x86_64_v3")
+        && !n.includes("arm64")
+        && !n.includes("sha512sum");
+    });
+    if (!tarAsset) throw new Error("No tarball found in latest proton-cachyos release");
+
+    const targetDir = path.join(linuxRunnersDir, tagName);
+    const alreadyInstalled = fs.existsSync(path.join(targetDir, "proton"));
+
+    let installedCachyVersions = [];
+    if (fs.existsSync(linuxRunnersDir)) {
+      try {
+        const dirs = await fs.readdir(linuxRunnersDir, { withFileTypes: true });
+        for (const d of dirs) {
+          if (d.isDirectory() && d.name.toLowerCase().includes("cachyos")) {
+            if (fs.existsSync(path.join(linuxRunnersDir, d.name, "proton"))) {
+              installedCachyVersions.push(d.name);
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    const hasOlderVersion = installedCachyVersions.length > 0 && !alreadyInstalled;
+
+    return {
+      success: true,
+      name: tagName,
+      fileName: tarAsset.name,
+      size: tarAsset.size,
+      sizeFormatted: `${(tarAsset.size / (1024 * 1024)).toFixed(0)} MB`,
+      downloadUrl: tarAsset.browser_download_url,
+      alreadyInstalled,
+      installPath: targetDir,
+      updateAvailable: hasOlderVersion,
+      installedVersions: installedCachyVersions,
+      latestVersion: tagName,
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function removeOldProtonCachyOS(keepVersion) {
+  if (!fs.existsSync(linuxRunnersDir)) return [];
+  const removed = [];
+  try {
+    const dirs = await fs.readdir(linuxRunnersDir, { withFileTypes: true });
+    for (const d of dirs) {
+      if (d.isDirectory() && d.name.toLowerCase().includes("cachyos") && d.name !== keepVersion) {
+        await fs.remove(path.join(linuxRunnersDir, d.name));
+        removed.push(d.name);
+      }
+    }
+  } catch (err) {
+    console.error("[Proton] Error removing old CachyOS versions:", err);
+  }
+  return removed;
+}
+
+async function downloadProtonCachyOS(parentWindow) {
+  if (!isLinux) return { success: false, message: "Only available on Linux" };
+
+  const progressWindow = new BrowserWindow({
+    width: 520, height: 280, parent: parentWindow || undefined,
+    modal: !!parentWindow, frame: false, transparent: true, resizable: false,
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
+  });
+
+  progressWindow.loadURL(
+    "data:text/html;charset=utf-8," +
+      encodeURIComponent(`<!DOCTYPE html><html><head><style>
+        * { margin: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          background: rgba(24,24,27,0.97); color: #e4e4e7; padding: 32px; height: 100vh;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
+        .spinner { width: 36px; height: 36px; border: 3px solid rgba(255,255,255,0.1);
+          border-top: 3px solid #8b5cf6; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        h3 { font-size: 16px; font-weight: 600; }
+        .status { font-size: 13px; color: #a1a1aa; text-align: center; min-height: 20px; }
+        .progress-wrap { width: 100%; max-width: 400px; }
+        .progress-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+        .progress { height: 100%; background: linear-gradient(90deg, #8b5cf6, #6d28d9); border-radius: 3px; transition: width 0.3s ease; width: 0%; }
+        .percent { font-size: 12px; color: #71717a; text-align: right; margin-top: 4px; }
+      </style></head><body>
+        <div class="spinner"></div>
+        <h3>Downloading Proton CachyOS</h3>
+        <div class="status">Fetching latest release...</div>
+        <div class="progress-wrap"><div class="progress-bar"><div class="progress" id="prog"></div></div>
+        <div class="percent" id="pct"></div></div>
+      </body></html>`)
+  );
+
+  const updateStatus = msg =>
+    progressWindow.webContents.executeJavaScript(
+      `document.querySelector('.status').textContent=${JSON.stringify(msg)};`
+    );
+  const updateProgress = pct =>
+    progressWindow.webContents.executeJavaScript(
+      `document.getElementById('prog').style.width='${pct}%';document.getElementById('pct').textContent='${Math.round(pct)}%';`
+    );
+
+  try {
+    updateStatus("Fetching latest Proton CachyOS release...");
+    updateProgress(5);
+
+    const info = await getProtonCachyOSInfo();
+    if (!info.success) throw new Error(info.error);
+
+    if (info.alreadyInstalled) {
+      updateStatus(`${info.name} is already installed!`);
+      updateProgress(100);
+      await new Promise(r => setTimeout(r, 2000));
+      progressWindow.close();
+      return { success: true, message: "Already installed", path: info.installPath, name: info.name };
+    }
+
+    updateStatus(`Downloading ${info.fileName} (${info.sizeFormatted})...`);
+    updateProgress(10);
+
+    const tempPath = path.join(os.tmpdir(), info.fileName);
+    const downloadRes = await fetch(info.downloadUrl);
+    if (!downloadRes.ok) throw new Error(`Download failed: ${downloadRes.status}`);
+
+    const totalSize = parseInt(downloadRes.headers.get("content-length") || info.size);
+    const reader = downloadRes.body.getReader();
+    const chunks = [];
+    let downloaded = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      downloaded += value.length;
+      const pct = 10 + (downloaded / totalSize) * 60;
+      updateProgress(pct);
+      updateStatus(`Downloading... ${(downloaded / 1024 / 1024).toFixed(1)} / ${(totalSize / 1024 / 1024).toFixed(1)} MB`);
+    }
+
+    const buffer = Buffer.concat(chunks);
+    await fs.writeFile(tempPath, buffer);
+
+    updateStatus("Extracting (this may take a moment)...");
+    updateProgress(75);
+    fs.ensureDirSync(linuxRunnersDir);
+
+    // .tar.xz -> il faut -J au lieu de -z
+    const tarFlag = info.fileName.endsWith(".tar.xz") ? "-xJf" : "-xzf";
+
+    await new Promise((resolve, reject) => {
+      const proc = exec(
+        `tar ${tarFlag} "${tempPath}" -C "${linuxRunnersDir}"`,
+        { maxBuffer: 10 * 1024 * 1024 },
+        err => err ? reject(err) : resolve()
+      );
+      proc.stderr.on("data", data => {
+        updateStatus(`Extracting: ${data.toString().trim().substring(0, 60)}`);
+      });
+    });
+
+    updateProgress(95);
+    await fs.remove(tempPath);
+
+    let installedPath = path.join(linuxRunnersDir, info.name);
+    let installedName = info.name;
+
+    if (!fs.existsSync(path.join(installedPath, "proton"))) {
+      const extractedDirs = await fs.readdir(linuxRunnersDir, { withFileTypes: true });
+      const found = extractedDirs.find(
+        d => d.isDirectory() && d.name.toLowerCase().includes("cachyos")
+      );
+      if (found && fs.existsSync(path.join(linuxRunnersDir, found.name, "proton"))) {
+        installedPath = path.join(linuxRunnersDir, found.name);
+        installedName = found.name;
+      } else {
+        throw new Error("Extraction succeeded but proton script not found");
+      }
+    }
+
+    const settingsManager = getSettingsManager();
+    const currentSettings = settingsManager.getSettings();
+    if (!currentSettings.linuxRunner || currentSettings.linuxRunner === "auto") {
+      settingsManager.updateSetting("linuxRunner", installedPath);
+      console.log(`[Proton] Auto-selected ${installedName} as default runner`);
+    }
+
+    if (currentSettings.linuxRunner && currentSettings.linuxRunner !== "auto") {
+      const currentRunnerName = path.basename(currentSettings.linuxRunner);
+      if (currentRunnerName.toLowerCase().includes("cachyos") && currentRunnerName !== installedName) {
+        settingsManager.updateSetting("linuxRunner", installedPath);
+      }
+    }
+
+    const removedVersions = await removeOldProtonCachyOS(installedName);
+    if (removedVersions.length > 0) {
+      console.log(`[Proton] Cleaned up old CachyOS versions: ${removedVersions.join(", ")}`);
+    }
+
+    updateStatus(`${installedName} installed successfully!`);
+    updateProgress(100);
+    await new Promise(r => setTimeout(r, 2000));
+    progressWindow.close();
+
+    return { success: true, message: `${installedName} installed`, path: installedPath, name: installedName };
+  } catch (err) {
+    console.error("[Proton] CachyOS download failed:", err);
+    updateStatus(`Error: ${err.message}`);
+    await new Promise(r => setTimeout(r, 3000));
+    progressWindow.close();
+    return { success: false, message: err.message };
+  }
+}
+
+// Proton GE Download
 /**
  * Fetch info about the latest Proton-GE release.
  * Checks if an update is available by comparing with installed versions.
@@ -936,7 +1168,7 @@ async function downloadProtonGE(parentWindow) {
   }
 }
 
-// ─── Prefix Management ───────────────────────────────────
+// Prefix Management
 
 /**
  * Get the compat data path for a game (creates dir if needed)
@@ -982,7 +1214,7 @@ async function getPrefixSize(gameName) {
   return await getDirectorySize(compatPath);
 }
 
-// ─── Runner Resolution ────────────────────────────────────
+// Runner Resolution
 
 /**
  * Resolve which runner to use for a game.
@@ -1045,7 +1277,7 @@ async function buildLaunchConfig(gameName, exePath, gameRunnerOverride, umuId, s
   const winePrefix = path.join(compatDataPath, "pfx");
   fs.ensureDirSync(winePrefix);
 
-  // ─── UMU Mode (prioritized if umu-run is installed) ───────────────────────
+  // UMU Mode (prioritized if umu-run is installed)
   if (isUmuInstalled()) {
     const runner = await resolveRunner(gameRunnerOverride);
 
@@ -1075,7 +1307,7 @@ async function buildLaunchConfig(gameName, exePath, gameRunnerOverride, umuId, s
     };
   }
 
-  // ─── Fallback : umu-run not installed ───────────────────────────────────
+  // Fallback : umu-run not installed
   const runner = await resolveRunner(gameRunnerOverride);
   if (!runner) {
     return { error: "No compatible runner found. Please install UMU-Launcher or Proton-GE." };
@@ -1110,7 +1342,7 @@ async function buildLaunchConfig(gameName, exePath, gameRunnerOverride, umuId, s
   return { error: "Unknown runner type" };
 }
 
-// ─── IPC Handlers ─────────────────────────────────────────
+// IPC Handlers
 
 function registerProtonHandlers() {
   if (!isLinux) return;
@@ -1266,9 +1498,23 @@ function registerProtonHandlers() {
     const { shell } = require("electron");
     shell.openPath(compatPath);
   });
+
+  ipcMain.handle("get-proton-cachyos-info", async () => getProtonCachyOSInfo());
+
+  ipcMain.handle("check-proton-cachyos-update", async () => getProtonCachyOSInfo());
+
+  ipcMain.handle("download-proton-cachyos", async event => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return await downloadProtonCachyOS(win);
+  });
+
+  ipcMain.handle("cleanup-old-proton-cachyos", async (_, keepVersion) => {
+    const removed = await removeOldProtonCachyOS(keepVersion);
+    return { success: true, removed };
+  });
 }
 
-// ─── Exports ──────────────────────────────────────────────
+// Exports
 
 module.exports = {
   registerProtonHandlers,
@@ -1288,4 +1534,7 @@ module.exports = {
   findSteamInstallPath,
   removeOldProtonGE,
   removeOldUmuProton,
+  getProtonCachyOSInfo,
+  downloadProtonCachyOS,
+  removeOldProtonCachyOS,
 };

@@ -74,6 +74,11 @@ contextBridge.exposeInMainWorld("electron", {
   cleanupOldProtonGE: keepVersion =>
     ipcRenderer.invoke("cleanup-old-proton-ge", keepVersion),
 
+  downloadProtonCachyOS: () => ipcRenderer.invoke("download-proton-cachyos"),
+  getProtonCachyOSInfo: () => ipcRenderer.invoke("get-proton-cachyos-info"),
+  checkProtonCachyOSUpdate: () => ipcRenderer.invoke("check-proton-cachyos-update"),
+  cleanupOldProtonCachyOS: keepVersion => ipcRenderer.invoke("cleanup-old-proton-cachyos", keepVersion),
+
   getSettings: () => ipcRenderer.invoke("get-settings"),
   saveSettings: (options, directory) =>
     ipcRenderer.invoke("save-settings", options, directory),

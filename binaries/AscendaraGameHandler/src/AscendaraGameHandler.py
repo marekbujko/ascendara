@@ -155,6 +155,30 @@ def atomic_write_json(file_path, data, indent=4):
         logging.error(f"Failed to atomically write JSON to {file_path}: {e}", exc_info=True)
         raise
 
+def _split_env_and_args(game_launch_cmd):
+    """
+    Tokens matching VAR=VALUE before %command% (or anywhere) become env vars.
+    '%command%' itself is dropped (no shell wrapper here).
+    Remaining tokens are passed as arguments to the game executable.
+    """
+    extra_env = {}
+    extra_args = []
+    if not game_launch_cmd:
+        return extra_env, extra_args
+
+    tokens = shlex.split(game_launch_cmd)
+    env_re = re.compile(r"^([A-Z_][A-Z0-9_]*)=(.*)$")
+
+    for tok in tokens:
+        if tok == "%command%":
+            continue
+        m = env_re.match(tok)
+        if m:
+            extra_env[m.group(1)] = m.group(2)
+        else:
+            extra_args.append(tok)
+
+    return extra_env, extra_args
 
 def launch_with_proton(exe_path, linux_config, game_launch_cmd=None):
     """
@@ -186,9 +210,11 @@ def launch_with_proton(exe_path, linux_config, game_launch_cmd=None):
         env["SDL_VIDEODRIVER"] = "x11"
         logging.info("[Proton] Setting SDL_VIDEODRIVER=x11 for controller support")
 
+    extra_env, extra_args = _split_env_and_args(game_launch_cmd)
+    env.update(extra_env)
+
     cmd = [proton_script, "run", exe_path]
-    if game_launch_cmd:
-        cmd.extend(game_launch_cmd.split())
+    cmd.extend(extra_args)
 
     game_dir = os.path.dirname(exe_path)
 
@@ -239,9 +265,11 @@ def launch_with_wine_isolated(exe_path, linux_config, game_launch_cmd=None):
         env["SDL_VIDEODRIVER"] = "x11"
         logging.info("[Wine] Setting SDL_VIDEODRIVER=x11 for controller support")
 
+    extra_env, extra_args = _split_env_and_args(game_launch_cmd)
+    env.update(extra_env)
+
     cmd = [wine_path, exe_path]
-    if game_launch_cmd:
-        cmd.extend(game_launch_cmd.split())
+    cmd.extend(extra_args)
 
     game_dir = os.path.dirname(exe_path)
 
@@ -376,9 +404,11 @@ def launch_with_umu(exe_path, linux_config, game_launch_cmd=None):
     if linux_config.get("steam_path"):
         env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = linux_config["steam_path"]
 
+    extra_env, extra_args = _split_env_and_args(game_launch_cmd)
+    env.update(extra_env)
+
     cmd = [umu_bin, exe_path]
-    if game_launch_cmd:
-        cmd.extend(game_launch_cmd.split())
+    cmd.extend(extra_args)
 
     install_vcredist(prefix_path, env, umu_bin=umu_bin)
 

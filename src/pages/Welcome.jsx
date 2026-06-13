@@ -220,13 +220,17 @@ function ThemeButton({ theme, currentTheme, onSelect }) {
 }
 
 const Welcome = ({ welcomeData, onComplete }) => {
-  const [showProtonConfirm, setShowProtonConfirm] = useState(false);
+  const [protonCachyInfo, setProtonCachyInfo] = useState(null);
+  const [isDownloadingProtonCachy, setIsDownloadingProtonCachy] = useState(false);
+  const [showProtonCachyConfirm, setShowProtonCachyConfirm] = useState(false);
+
+  const [protonGEInfo, setProtonGEInfo] = useState(null);
+  const [isDownloadingProtonGE, setIsDownloadingProtonGE] = useState(false);
+  const [showProtonGEConfirm, setShowProtonGEConfirm] = useState(false);
   const [runnersList, setRunnersList] = useState([]);
   const [isOnLinux, setIsOnLinux] = useState(false);
-  const [protonGEInfo, setProtonGEInfo] = useState(null);
   const [protonDetected, setProtonDetected] = useState(false);
   const [protonInstalled, setProtonInstalled] = useState(false);
-  const [isDownloadingProton, setIsDownloadingProton] = useState(false);
   const [umuInstalled, setUmuInstalled] = useState(false);
   const [umuProtonInfo, setUmuProtonInfo] = useState(null);
   const [isDownloadingUmuLauncher, setIsDownloadingUmuLauncher] = useState(false);
@@ -2554,55 +2558,108 @@ const Welcome = ({ welcomeData, onComplete }) => {
                           </Button>
                         </div>
 
-                        {/* Proton GE */}
+                        {/* Proton CachyOS */}
                         <div className="flex flex-col justify-between rounded-xl border-2 border-primary bg-primary/5 p-4 shadow-md">
                           <div>
                             <div className="mb-1 flex items-center gap-2">
                               <Rocket className="h-5 w-5 text-primary" />
-                              <span className="font-bold text-primary">Proton GE</span>
+                              <span className="font-bold text-primary">Proton CachyOS</span>
                             </div>
                             <p className="mb-3 text-xs text-muted-foreground">
-                              {t("welcome.protonGEDesc")}
-                              {protonGEInfo?.sizeFormatted && (
+                              {t("welcome.protonDesc")}
+                              {protonCachyInfo?.sizeFormatted && (
                                 <span className="mt-1 block font-mono text-xs opacity-75">
-                                  {t("welcome.protonGESize")} {protonGEInfo.sizeFormatted}
+                                  {t("welcome.protonSize")} {protonCachyInfo.sizeFormatted}
                                 </span>
                               )}
                             </p>
                           </div>
                           <Button
                             size="sm"
-                            disabled={isDownloadingProton}
+                            disabled={isDownloadingProtonCachy}
                             className="w-full text-secondary"
                             onClick={async () => {
-                              if (!protonGEInfo) {
-                                setIsDownloadingProton(true);
+                              if (!protonCachyInfo) {
+                                setIsDownloadingProtonCachy(true);
                                 try {
-                                  const info = await window.electron.getProtonGEInfo();
-                                  if (info.success) { setProtonGEInfo(info); setShowProtonConfirm(true); }
+                                  const info = await window.electron.getProtonCachyOSInfo();
+                                  if (info.success) {
+                                    setProtonCachyInfo(info);
+                                    setShowProtonCachyConfirm(true);
+                                  }
                                 } catch (e) { console.error(e); }
-                                setIsDownloadingProton(false);
+                                setIsDownloadingProtonCachy(false);
                               } else {
-                                setShowProtonConfirm(true);
+                                setShowProtonCachyConfirm(true);
                               }
                             }}
                           >
-                            {isDownloadingProton ? (
-                              <><Loader className="mr-2 h-4 w-4 animate-spin" /> {t("welcome.protonGEChecking")}</>
+                            {isDownloadingProtonCachy ? (
+                              <><Loader className="mr-2 h-4 w-4 animate-spin" /> {t("welcome.protonChecking")}</>
                             ) : (
-                              <><Download className="mr-2 h-4 w-4" /> {t("welcome.protonGEInstall")}</>
+                              <><Download className="mr-2 h-4 w-4" /> {t("welcome.protonInstall")}</>
                             )}
                           </Button>
                         </div>
                       </div>
                     </div>
 
-                    {/* ── Alternative (Wine / UMU-Proton) ── */}
+                    {/* Alternative (Wine / UMU-Proton) */}
                     <details className="rounded-xl border border-border bg-card/30 p-4">
                       <summary className="cursor-pointer text-sm font-medium text-muted-foreground select-none">
                         {t("welcome.alternatives")}
                       </summary>
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        {/* Proton-GE */}
+                        <div className="flex flex-col justify-between rounded-xl border border-border bg-card/50 p-4">
+                          <div>
+                            <div className="mb-1 flex items-center gap-2">
+                              <Rocket className="h-5 w-5 text-muted-foreground" />
+                              <span className="font-bold text-muted-foreground">Proton-GE</span>
+                            </div>
+                            <p className="mb-3 text-xs text-muted-foreground">
+                              {t("welcome.protonGEAltDesc")}
+                              {protonGEInfo?.sizeFormatted && (
+                                <span className="mt-1 block font-mono text-xs opacity-75">
+                                  {t("welcome.protonSize")} {protonGEInfo.sizeFormatted}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isDownloadingProtonGE}
+                            className="w-full text-muted-foreground"
+                            onClick={async () => {
+                              if (!protonGEInfo) {
+                                setIsDownloadingProtonGE(true);
+                                try {
+                                  const info = await window.electron.getProtonGEInfo();
+                                  if (info.success) {
+                                    if (info.alreadyInstalled) {
+                                      const updated = await window.electron.getRunners();
+                                      setRunnersList(updated);
+                                    } else {
+                                      setProtonGEInfo(info);
+                                      setShowProtonGEConfirm(true);
+                                    }
+                                  }
+                                } catch (e) { console.error(e); }
+                                setIsDownloadingProtonGE(false);
+                              } else {
+                                setShowProtonGEConfirm(true);
+                              }
+                            }}
+                          >
+                            {isDownloadingProtonGE ? (
+                              <><Loader className="mr-2 h-4 w-4 animate-spin" /> {t("welcome.protonChecking")}</>
+                            ) : (
+                              <><Download className="mr-2 h-4 w-4" /> {t("common.install")}</>
+                            )}
+                          </Button>
+                        </div>
+
                         {/* Wine */}
                         <div className="flex flex-col justify-between rounded-xl border border-border bg-card/50 p-4">
                           <div>
@@ -2939,8 +2996,93 @@ const Welcome = ({ welcomeData, onComplete }) => {
           )}
         </AnimatePresence>
       </div>
+      {/* Proton CachyOS Download Confirmation Dialog */}
+      {showProtonCachyConfirm && protonCachyInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 max-w-md space-y-4 rounded-xl border border-border bg-background p-6">
+            <h3 className="text-lg font-semibold">
+              {protonCachyInfo.updateAvailable
+                ? t("welcome.protonGEDialog.updateTitleCachy")
+                : t("welcome.protonGEDialog.downloadTitleCachy")}
+            </h3>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                {protonCachyInfo.updateAvailable ? (
+                  <>
+                    {t("welcome.protonGEDialog.updateAvailableCachy")}{" "}
+                    <strong className="text-foreground">{protonCachyInfo.name}</strong>
+                    {protonCachyInfo.installedVersions.length > 0 && (
+                      <span>
+                        {" "}
+                        ({t("welcome.protonGEDialog.replacing")}{" "}
+                        {protonCachyInfo.installedVersions.join(", ")})
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {t("welcome.protonGEDialog.aboutToDownload")}{" "}
+                    <strong className="text-foreground">{protonCachyInfo.name}</strong>.
+                  </>
+                )}
+              </p>
+              <p>
+                {t("welcome.protonGEDialog.file")}{" "}
+                <code className="rounded bg-muted px-1">{protonCachyInfo.fileName}</code>
+              </p>
+              <p>
+                {t("welcome.protonGEDialog.size")}{" "}
+                <strong className="text-foreground">{protonCachyInfo.sizeFormatted}</strong>{" "}
+                (
+                {t("welcome.protonGEDialog.sizeAfterExtraction", {
+                  size: (protonCachyInfo.size / (1024 * 1024 * 1024)).toFixed(1),
+                })}
+                )
+              </p>
+              <p className="text-muted-foreground">
+                {t("welcome.protonGEDialog.descriptionCachy")}{" "}
+                <code className="rounded bg-muted px-1">~/.ascendara/runners/</code>
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowProtonCachyConfirm(false);
+                  setProtonCachyInfo(null);
+                }}
+              >
+                {t("welcome.protonGEDialog.cancel")}
+              </Button>
+              <Button
+                onClick={async () => {
+                  setShowProtonCachyConfirm(false);
+                  setIsDownloadingProtonCachy(true);
+                  try {
+                    const result = await window.electron.downloadProtonCachyOS();
+                    if (result.success) {
+                      const updated = await window.electron.getRunners();
+                      setRunnersList(updated);
+                      setProtonInstalled(true);
+                      await window.electron.updateSetting("linuxRunner", result.path);
+                    }
+                  } catch (e) {
+                    console.error("Failed to download Proton-CachyOS:", e);
+                  }
+                  setIsDownloadingProtonCachy(false);
+                }}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                {t("welcome.protonGEDialog.download")} ({protonCachyInfo.sizeFormatted})
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Proton-GE Download Confirmation Dialog */}
-      {showProtonConfirm && protonGEInfo && (
+      {showProtonGEConfirm && protonGEInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 max-w-md space-y-4 rounded-xl border border-border bg-background p-6">
             <h3 className="text-lg font-semibold">
@@ -2991,7 +3133,7 @@ const Welcome = ({ welcomeData, onComplete }) => {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setShowProtonConfirm(false);
+                  setShowProtonGEConfirm(false);
                   setProtonGEInfo(null);
                 }}
               >
@@ -2999,21 +3141,20 @@ const Welcome = ({ welcomeData, onComplete }) => {
               </Button>
               <Button
                 onClick={async () => {
-                  setShowProtonConfirm(false);
-                  setIsDownloadingProton(true);
+                  setShowProtonGEConfirm(false);
+                  setIsDownloadingProtonGE(true);
                   try {
                     const result = await window.electron.downloadProtonGE();
                     if (result.success) {
                       const updated = await window.electron.getRunners();
                       setRunnersList(updated);
                       setProtonInstalled(true);
-                      // Auto-select this runner
                       await window.electron.updateSetting("linuxRunner", result.path);
                     }
                   } catch (e) {
                     console.error("Failed to download Proton-GE:", e);
                   }
-                  setIsDownloadingProton(false);
+                  setIsDownloadingProtonGE(false);
                 }}
                 className="gap-2"
               >
