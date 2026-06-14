@@ -1248,24 +1248,92 @@ class GofileDownloader:
                         
                         # Use long path prefix for extraction to support paths > 260 chars
                         long_extract_dir = long_path(extract_dir)
-                        # The unrar Python library reads all archive headers in __init__
-                        # before setpassword can be called, so header-encrypted archives
-                        # must be detected first and extracted via CLI instead.
-                        _rar_encrypted = False
+                        # Always try the bundled Python unrar library first - it supports
+                        # password-protected and encrypted archives via pwd parameter.
+                        _lib_extraction_failed = False
+                        _lib_err = None
                         try:
-                            with rarfile.RarFile(archive_path, 'r') as _probe:
-                                pass
-                        except Exception as _probe_err:
-                            if 'password' in str(_probe_err).lower() or 'encrypted' in str(_probe_err).lower():
-                                _rar_encrypted = True
-                                logging.info(f"[AscendaraGofileHelper] Encrypted RAR detected, falling back to CLI extraction with password")
-                            else:
-                                raise
+                            # Try opening with password first (handles encrypted-header archives)
+                            try:
+                                _rar_ref_test = rarfile.RarFile(archive_path, 'r', pwd='steamrip.com')
+                            except Exception:
+                                _rar_ref_test = rarfile.RarFile(archive_path, 'r')
+                                try:
+                                    _rar_ref_test.setpassword('steamrip.com')
+                                except Exception:
+                                    pass
+                            with _rar_ref_test as rar_ref:
+                                rar_files = [info for info in rar_ref.infolist() 
+                                            if not info.filename.endswith('.url') and '_CommonRedist' not in info.filename]
+                                logging.info(f"[AscendaraGofileHelper] Extracting {len(rar_files)} files from RAR with library")
+                                initial_file_count = 0
+                                try:
+                                    for root, dirs, files_in_dir in os.walk(extract_dir):
+                                        initial_file_count += len([f for f in files_in_dir if not f.endswith('.url') and not f.endswith('.rar') and not f.endswith('.zip')])
+                                except Exception:
+                                    pass
+                                extraction_complete = threading.Event()
+                                extraction_error = []
+                                def extract_thread():
+                                    try:
+                                        try:
+                                            rar_ref.extractall(long_extract_dir)
+                                        except Exception:
+                                            rar_ref.extractall(extract_dir)
+                                    except Exception as e:
+                                        extraction_error.append(e)
+                                    finally:
+                                        extraction_complete.set()
+                                thread = threading.Thread(target=extract_thread, daemon=False)
+                                thread.start()
+                                last_count = 0
+                                last_update_time = time.time()
+                                last_file_name = "Preparing..."
+                                while not extraction_complete.is_set():
+                                    current_count = 0
+                                    latest_file = None
+                                    latest_mtime = 0
+                                    try:
+                                        for root, dirs, files_in_dir in os.walk(extract_dir):
+                                            for f in files_in_dir:
+                                                if not f.endswith('.url') and not f.endswith('.rar') and not f.endswith('.zip'):
+                                                    current_count += 1
+                                                    try:
+                                                        full_path = os.path.join(root, f)
+                                                        mtime = os.path.getmtime(full_path)
+                                                        if mtime > latest_mtime:
+                                                            latest_mtime = mtime
+                                                            latest_file = f
+                                                    except Exception:
+                                                        pass
+                                    except Exception:
+                                        pass
+                                    new_files = max(0, current_count - initial_file_count)
+                                    if new_files > last_count or time.time() - last_update_time > 2.0:
+                                        self._files_extracted_count = new_files
+                                        if latest_file:
+                                            last_file_name = latest_file
+                                        self._update_extraction_progress(last_file_name, self._files_extracted_count, max(total_files_to_extract, 1))
+                                        last_count = new_files
+                                        last_update_time = time.time()
+                                    extraction_complete.wait(timeout=0.5)
+                                thread.join()
+                                if extraction_error:
+                                    raise extraction_error[0]
+                                self._update_extraction_progress("Complete", self._files_extracted_count, max(total_files_to_extract, 1), force=True)
+                        except Exception as _le:
+                            _lib_extraction_failed = True
+                            _lib_err = _le
+                            logging.warning(f"[AscendaraGofileHelper] Python library extraction failed ({_le}), falling back to CLI tools")
 
-                        if _rar_encrypted:
+                        if _lib_extraction_failed:
                             _CREATE_NO_WINDOW = 0x08000000
-                            # WinRAR/UnRAR is the authoritative RAR5 tool - try it first
-                            _unrar_paths = [shutil.which('unrar'), shutil.which('WinRAR')]
+                            # Look for UnRAR/7z: check bundled exe directory first, then system paths
+                            _exe_dir = os.path.dirname(sys.executable)
+                            _unrar_paths = [
+                                os.path.join(_exe_dir, 'UnRAR.exe'),
+                                shutil.which('unrar'), shutil.which('WinRAR'),
+                            ]
                             try:
                                 import winreg as _winreg
                                 for _hive in (_winreg.HKEY_LOCAL_MACHINE, _winreg.HKEY_CURRENT_USER):
@@ -1343,132 +1411,11 @@ class GofileDownloader:
                                         raise RuntimeError(f"7z extraction timed out after {timeout_seconds // 3600} hour(s)")
                                 else:
                                     raise RuntimeError(
-                                        "RAR extraction failed. WinRAR or 7-Zip is required to extract this archive. "
-                                        "Please install WinRAR from https://www.rarlab.com/ or 7-Zip from https://7-zip.org/"
+                                        f"RAR extraction failed: bundled unrar library error was: {_lib_err}. "
+                                        "No CLI fallback (UnRAR.exe/7-Zip) found. Please reinstall Ascendara or install 7-Zip from https://7-zip.org/"
                                     )
                             logging.info(f"[AscendaraGofileHelper] RAR extraction with CLI tools complete")
                             self._update_extraction_progress("Complete", self._files_extracted_count, max(total_files_to_extract, 1), force=True)
-                        else:
-                            with rarfile.RarFile(archive_path, 'r') as rar_ref:
-                                # Filter members to extract (exclude .url and _CommonRedist)
-                                rar_files = [info for info in rar_ref.infolist() 
-                                            if not info.filename.endswith('.url') and '_CommonRedist' not in info.filename]
-                                
-                                logging.info(f"[AscendaraGofileHelper] Extracting {len(rar_files)} files from RAR (fast mode)")
-                                
-                                # Count existing files before extraction to track only new files
-                                initial_file_count = 0
-                                try:
-                                    for root, dirs, files_in_dir in os.walk(extract_dir):
-                                        initial_file_count += len([f for f in files_in_dir if not f.endswith('.url') and not f.endswith('.rar') and not f.endswith('.zip')])
-                                except Exception:
-                                    pass
-                                
-                                # Use extractall() in thread for speed, monitor directory for progress
-                                extraction_complete = threading.Event()
-                                extraction_error = []
-                                
-                                def extract_thread():
-                                    try:
-                                        # Try with long path first, fall back to regular path
-                                        try:
-                                            rar_ref.extractall(long_extract_dir)
-                                        except Exception:
-                                            rar_ref.extractall(extract_dir)
-                                    except Exception as e:
-                                        extraction_error.append(e)
-                                    finally:
-                                        extraction_complete.set()
-                                
-                                # Start extraction in background (non-daemon so it must complete)
-                                thread = threading.Thread(target=extract_thread, daemon=False)
-                                thread.start()
-                                
-                                # Monitor progress by counting extracted files and tracking latest file
-                                last_count = 0
-                                last_update_time = time.time()
-                                last_file_name = "Preparing..."
-                                
-                                while not extraction_complete.is_set():
-                                    # Count files in extraction directory and find most recent file
-                                    current_count = 0
-                                    latest_file = None
-                                    latest_mtime = 0
-                                    
-                                    try:
-                                        for root, dirs, files_in_dir in os.walk(extract_dir):
-                                            for f in files_in_dir:
-                                                if not f.endswith('.url') and not f.endswith('.rar') and not f.endswith('.zip'):
-                                                    current_count += 1
-                                                    # Track the most recently modified file
-                                                    try:
-                                                        full_path = os.path.join(root, f)
-                                                        mtime = os.path.getmtime(full_path)
-                                                        if mtime > latest_mtime:
-                                                            latest_mtime = mtime
-                                                            latest_file = f
-                                                    except Exception:
-                                                        pass
-                                    except Exception:
-                                        pass
-                                    
-                                    # Calculate newly extracted files
-                                    newly_extracted = max(0, current_count - initial_file_count)
-                                    
-                                    # Update current file name if we found a new one
-                                    if latest_file and latest_file != last_file_name:
-                                        last_file_name = latest_file
-                                    
-                                    # Update progress if files changed or every 5 seconds
-                                    current_time = time.time()
-                                    if newly_extracted > last_count or (current_time - last_update_time) >= 5.0:
-                                        files_extracted_this_archive = self._files_extracted_count + newly_extracted
-                                        self._update_extraction_progress(last_file_name, files_extracted_this_archive, total_files_to_extract, force=True)
-                                        last_count = newly_extracted
-                                        last_update_time = current_time
-                                    
-                                    time.sleep(0.5)  # Check every 0.5 seconds
-                                
-                                # Wait for thread to complete fully (no timeout - must finish)
-                                logging.info(f"[AscendaraGofileHelper] Waiting for RAR extraction thread to complete...")
-                                thread.join()
-                                logging.info(f"[AscendaraGofileHelper] RAR extraction thread completed")
-                                
-                                if extraction_error:
-                                    logging.error(f"[AscendaraGofileHelper] RAR extraction failed: {extraction_error[0]}")
-                                    raise extraction_error[0]
-                                
-                                logging.info(f"[AscendaraGofileHelper] RAR extraction complete")
-                                
-                                # Clean up unwanted files (.url and _CommonRedist)
-                                for root, dirs, files_in_dir in os.walk(extract_dir):
-                                    if '_CommonRedist' in root:
-                                        try:
-                                            shutil.rmtree(root)
-                                            logging.info(f"[AscendaraGofileHelper] Removed _CommonRedist: {root}")
-                                        except Exception as e:
-                                            logging.warning(f"[AscendaraGofileHelper] Could not remove _CommonRedist: {e}")
-                                        continue
-                                    
-                                    for fname in files_in_dir:
-                                        if fname.endswith('.url'):
-                                            try:
-                                                os.remove(os.path.join(root, fname))
-                                            except Exception:
-                                                pass
-                                
-                                # Build watching data after extraction
-                                for rar_info in rar_files:
-                                    extracted_path = os.path.join(extract_dir, rar_info.filename)
-                                    if os.path.exists(long_path(extracted_path)) or os.path.exists(extracted_path):
-                                        key = f"{os.path.relpath(extracted_path, self.download_dir)}"
-                                        watching_data[key] = {"size": rar_info.file_size}
-                                    
-                                    is_dir = rar_info.filename.endswith('/') or rar_info.filename.endswith('\\')
-                                    if not is_dir:
-                                        self._files_extracted_count += 1
-                                
-                                self._update_extraction_progress("Complete", self._files_extracted_count, total_files_to_extract, force=True)
                 else:
                     # For non-Windows, use appropriate extraction tool
                     try:

@@ -1439,33 +1439,23 @@ class AscendaraDownloader:
             except ImportError:
                 raise RuntimeError("UnRAR library not found. Please reinstall Ascendara.")
 
-            # Probe for encryption: the unrar Python library reads all archive headers
-            # in __init__ without password support, so encrypted archives must be
-            # detected first and extracted via CLI instead.
-            _encrypted = False
+            # Always try the bundled Python unrar library first - it supports
+            # password-protected and encrypted archives via setpassword().
+            logging.info(f"[AscendaraDownloader] Extracting RAR with Python unrar library: {archive_path}")
             try:
-                with rarfile.RarFile(archive_path, 'r') as _probe:
-                    pass
-            except Exception as _pe:
-                if 'password' in str(_pe).lower() or 'encrypted' in str(_pe).lower():
-                    _encrypted = True
-                    logging.info(f"[AscendaraDownloader] Encrypted RAR detected, falling back to CLI extraction with password")
-                else:
-                    raise
+                return self._extract_rar_with_library(archive_path, watching_data, extract_to)
+            except Exception as _lib_err:
+                logging.warning(f"[AscendaraDownloader] Python library extraction failed ({_lib_err}), falling back to CLI tools")
+                pass
 
-            if not _encrypted:
-                logging.info(f"[AscendaraDownloader] Extracting RAR with Python unrar library: {archive_path}")
-                try:
-                    return self._extract_rar_with_library(archive_path, watching_data, extract_to)
-                except Exception as _lib_err:
-                    logging.warning(f"[AscendaraDownloader] Python library extraction failed ({_lib_err}), falling back to CLI tools")
-                    # Don't assume encryption - just fall back to CLI tools
-                    pass
-
-            # Use CLI extraction tools (WinRAR/7-Zip) for encrypted archives or when Python library fails
+            # Use CLI extraction tools as fallback when Python library fails
             _CREATE_NO_WINDOW = 0x08000000
-            # WinRAR/UnRAR is the authoritative RAR5 tool - try it first
-            _unrar_paths = [_shutil.which('unrar'), _shutil.which('WinRAR')]
+            # Look for UnRAR/7z: check bundled exe directory first, then system paths
+            _exe_dir = os.path.dirname(sys.executable)
+            _unrar_paths = [
+                os.path.join(_exe_dir, 'UnRAR.exe'),
+                _shutil.which('unrar'), _shutil.which('WinRAR'),
+            ]
             try:
                 import winreg as _winreg
                 for _hive in (_winreg.HKEY_LOCAL_MACHINE, _winreg.HKEY_CURRENT_USER):
@@ -1545,8 +1535,8 @@ class AscendaraDownloader:
                         raise RuntimeError(f"7z extraction timed out after {timeout_seconds // 3600} hour(s)")
                 else:
                     raise RuntimeError(
-                        "RAR extraction failed. WinRAR or 7-Zip is required to extract this archive. "
-                        "Please install WinRAR from https://www.rarlab.com/ or 7-Zip from https://7-zip.org/"
+                        f"RAR extraction failed: bundled unrar library error was: {_lib_err}. "
+                        "No CLI fallback (UnRAR.exe/7-Zip) found. Please reinstall Ascendara or install 7-Zip from https://7-zip.org/"
                     )
             logging.info(f"[AscendaraDownloader] RAR extraction with CLI tools complete")
             for dirpath, _, filenames in os.walk(self.download_dir):
@@ -1705,11 +1695,17 @@ class AscendaraDownloader:
         _baseline_files = _snapshot_files()
         initial_file_count = len(_baseline_files)
         
-        with rarfile.RarFile(archive_path, 'r') as rar_ref:
+        # Try opening with password first (handles encrypted-header archives),
+        # fall back to opening without password for non-encrypted archives.
+        try:
+            rar_ref = rarfile.RarFile(archive_path, 'r', pwd='steamrip.com')
+        except Exception:
+            rar_ref = rarfile.RarFile(archive_path, 'r')
             try:
                 rar_ref.setpassword('steamrip.com')
             except Exception:
                 pass
+        with rar_ref:
             # Filter members to extract (exclude .url and _CommonRedist)
             rar_files = [info for info in rar_ref.infolist() 
                         if not info.filename.endswith('.url') and '_CommonRedist' not in info.filename]
