@@ -497,9 +497,12 @@ const LocalRefresh = () => {
         }
 
         // Clear caches so the app loads fresh data with new imgIDs
+        // Do NOT invalidate imageCacheService settings cache - the localIndex path hasn't changed,
+        // and invalidating it causes a race where images load with null settings and hit the API.
         console.log("[LocalRefresh] Refresh complete, clearing caches to load new data");
-        imageCacheService.invalidateSettingsCache();
-        await imageCacheService.clearCache(true); // Skip auto-refresh, we'll reload manually
+        imageCacheService.memoryCache.clear();
+        imageCacheService.memoryCacheOrder = [];
+        await imageCacheService.clearIndexedDB();
         gameService.clearMemoryCache();
         localStorage.removeItem("ascendara_games_cache");
         localStorage.removeItem("local_ascendara_games_timestamp");
@@ -554,6 +557,18 @@ const LocalRefresh = () => {
           await updateSetting("usingLocalIndex", true);
           wasFirstIndexRef.current = false;
         }
+        // Clear image/game caches and notify other components
+        imageCacheService.memoryCache.clear();
+        imageCacheService.memoryCacheOrder = [];
+        await imageCacheService.clearIndexedDB();
+        gameService.clearMemoryCache();
+        localStorage.removeItem("ascendara_games_cache");
+        localStorage.removeItem("local_ascendara_games_timestamp");
+        localStorage.removeItem("local_ascendara_metadata_cache");
+        localStorage.removeItem("local_ascendara_last_updated");
+        window.dispatchEvent(new CustomEvent("index-refreshed", {
+          detail: { timestamp: Date.now() }
+        }));
       } else {
         // Don't show error if user manually stopped
         setIsRefreshing(false);
@@ -628,9 +643,11 @@ const LocalRefresh = () => {
       setLastRefreshTime(new Date()); // Set last refresh time to now
       
       // Clear caches so the app loads fresh data
+      // Do NOT invalidate imageCacheService settings cache - the localIndex path hasn't changed.
       console.log("[LocalRefresh] Public index download complete, clearing caches");
-      imageCacheService.invalidateSettingsCache();
-      await imageCacheService.clearCache(true);
+      imageCacheService.memoryCache.clear();
+      imageCacheService.memoryCacheOrder = [];
+      await imageCacheService.clearIndexedDB();
       gameService.clearMemoryCache();
       localStorage.removeItem("ascendara_games_cache");
       localStorage.removeItem("local_ascendara_games_timestamp");
