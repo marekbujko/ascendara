@@ -2594,7 +2594,8 @@
       "updateAvailableCurrent": "(current: {{version}})",
       "updateAvailableUmu": "Update available",
       "updateProtonCachy": "Update Proton CachyOS",
-      "updateProtonGE": "Update Proton-GE"
+      "updateProtonGE": "Update Proton-GE",
+      "viewProtonOptions": "View available launch options"
     },
     "loadingSettings": "Loading your settings",
     "yourLocalIndex": "Your Game Index",
@@ -3039,6 +3040,7 @@
     },
     "protonGERecommended": "Proton-GE (Recommended)",
     "protonInstall": "Install Proton-GE",
+    "protonInstallCachy": "Install Proton CachyOS",
     "protonSize": "Size:",
     "pythonIsRequired": "Python is Required",
     "pythonMustBeInstalled": "Python must be installed on your computer in order to run Ascendara's core tools on this operating system",
@@ -3083,6 +3085,7 @@
     "startTheDownload": "You sit back and relax while your game downloads and extracts in Ascendara",
     "stayPrivate": "Stay Private",
     "stayUpToDate": "Keep Ascendara up to date",
+    "steamProtonDetected": "Steam's Proton was detected and works with UMU, but Proton-CachyOS is recommended for better game compatibility and performance.",
     "systemWine": "System Wine",
     "systemWineDesc": "Less compatible than Proton GE - use only if you have a specific reason.",
     "takeTour": "Take the Tour",

@@ -418,6 +418,7 @@ def launch_with_umu(exe_path, linux_config, game_launch_cmd=None):
     logging.info(f"[UMU] GAMEID={env['GAMEID']}, WINEPREFIX={prefix_path}")
     logging.info(f"[UMU] PROTONPATH={env.get('PROTONPATH', '(auto)')}")
 
+    logging.info(f"[UMU] Extra env applied: {extra_env}")
     try:
         process = subprocess.Popen(
             cmd,

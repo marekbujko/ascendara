@@ -88,7 +88,7 @@ function ensureLinuxDirectories() {
 async function detectInstalledProtons() {
   if (!isLinux) return [];
 
-  const protons = [];
+  let protons = [];
   const seen = new Set();
 
   // 1. Scan Steam common directories
@@ -145,6 +145,25 @@ async function detectInstalledProtons() {
       console.warn(`[Proton] Error scanning runners dir:`, err.message);
     }
   }
+
+  const seenRealPaths = new Set();
+  const dedupedProtons = [];
+
+  for (const p of protons) {
+    let realPath;
+    try {
+      realPath = await fs.realpath(p.path);
+    } catch (e) {
+      realPath = p.path; // fallback if realpath fails
+    }
+
+    if (!seenRealPaths.has(realPath)) {
+      seenRealPaths.add(realPath);
+      dedupedProtons.push(p);
+    }
+  }
+
+  protons = dedupedProtons;
 
   // Sort: Cachy Proton first, then by version desc
   protons.sort((a, b) => {
@@ -656,9 +675,20 @@ async function getProtonCachyOSInfo() {
     if (!tarAsset) throw new Error("No tarball found in latest proton-cachyos release");
 
     const targetDir = path.join(linuxRunnersDir, tagName);
-    const alreadyInstalled = fs.existsSync(path.join(targetDir, "proton"));
+
+    // Normalize: strip "proton-" prefix and "-x86_64"/"-x86_64_v3"/"-arm64" suffix
+    // to compare "cachyos-11.0-20260601-slr" and  "proton-cachyos-11.0-20260601-slr-x86_64" for examplz
+    const normalizeCachyName = name =>
+      name
+        .toLowerCase()
+        .replace(/^proton-/, "")
+        .replace(/-x86_64(_v3)?$/, "")
+        .replace(/-arm64$/, "");
+
+    const normalizedLatest = normalizeCachyName(tagName);
 
     let installedCachyVersions = [];
+    let alreadyUpToDate = false;
     if (fs.existsSync(linuxRunnersDir)) {
       try {
         const dirs = await fs.readdir(linuxRunnersDir, { withFileTypes: true });
@@ -666,13 +696,17 @@ async function getProtonCachyOSInfo() {
           if (d.isDirectory() && d.name.toLowerCase().includes("cachyos")) {
             if (fs.existsSync(path.join(linuxRunnersDir, d.name, "proton"))) {
               installedCachyVersions.push(d.name);
+              if (normalizeCachyName(d.name) === normalizedLatest) {
+                alreadyUpToDate = true;
+              }
             }
           }
         }
       } catch (e) {}
     }
 
-    const hasOlderVersion = installedCachyVersions.length > 0 && !alreadyInstalled;
+    const alreadyInstalled = alreadyUpToDate;
+    const hasOlderVersion = installedCachyVersions.length > 0 && !alreadyUpToDate;
 
     return {
       success: true,

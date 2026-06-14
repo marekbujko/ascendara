@@ -31,6 +31,7 @@ import {
   Gift,
   Crown,
   Star,
+  Info,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -228,6 +229,7 @@ const Welcome = ({ welcomeData, onComplete }) => {
   const [isDownloadingProtonGE, setIsDownloadingProtonGE] = useState(false);
   const [showProtonGEConfirm, setShowProtonGEConfirm] = useState(false);
   const [runnersList, setRunnersList] = useState([]);
+  const cachyOsInstalled = runnersList.some(r => r.name.toLowerCase().includes("cachyos"));
   const [isOnLinux, setIsOnLinux] = useState(false);
   const [protonDetected, setProtonDetected] = useState(false);
   const [protonInstalled, setProtonInstalled] = useState(false);
@@ -2452,34 +2454,46 @@ const Welcome = ({ welcomeData, onComplete }) => {
                     {/* Status Banner */}
                     {(() => {
                       const hasProton = runnersList.some(r => r.type === "proton" || r.name.toLowerCase().includes("proton"));
-                      const bothInstalled = hasProton && umuInstalled;
+                      const hasOptimizedProton = runnersList.some(r => {
+                        const n = r.name.toLowerCase();
+                        return n.includes("cachyos") || n.includes("ge-proton") || n.includes("proton-ge");
+                      });
+                      const onlySteamProton = hasProton && !hasOptimizedProton;
+                      const bothInstalled = hasOptimizedProton && umuInstalled;
+                      const partialOptimal = onlySteamProton && umuInstalled;
                       const noneInstalled = !hasProton && !umuInstalled;
 
                       return (
                         <div className={`flex gap-4 rounded-xl border p-5 text-left ${
                           bothInstalled ? "border-green-500/40 bg-green-500/10"
                           : noneInstalled ? "border-red-500/30 bg-red-500/10"
+                          : partialOptimal ? "border-blue-500/30 bg-blue-500/10"
                           : "border-yellow-500/30 bg-yellow-500/10"
                         }`}>
                           {bothInstalled
                             ? <CircleCheck className="mt-1 h-7 w-7 shrink-0 text-green-500" />
                             : noneInstalled
                               ? <XCircle className="mt-1 h-7 w-7 shrink-0 text-red-500" />
-                              : <AlertTriangle className="mt-1 h-7 w-7 shrink-0 text-yellow-500" />}
+                              : partialOptimal
+                                ? <Info className="mt-1 h-7 w-7 shrink-0 text-blue-500" />
+                                : <AlertTriangle className="mt-1 h-7 w-7 shrink-0 text-yellow-500" />}
 
                           <div className="space-y-1">
                             <h3 className={`text-lg font-bold ${
                               bothInstalled ? "text-green-500"
                               : noneInstalled ? "text-red-500"
+                              : partialOptimal ? "text-blue-500"
                               : "text-yellow-500"
                             }`}>
                               {bothInstalled
                                 ? t("welcome.bothInstalled")
                                 : noneInstalled
                                   ? t("welcome.noRunnersTitle")
-                                  : hasProton
-                                    ? t("welcome.partialSetupProton")
-                                    : t("welcome.partialSetupUmu")}
+                                  : partialOptimal
+                                    ? t("welcome.steamProtonDetected")
+                                    : hasProton
+                                      ? t("welcome.partialSetupProton")
+                                      : t("welcome.partialSetupUmu")}
                             </h3>
 
                             {runnersList.length > 0 && (
@@ -2576,7 +2590,7 @@ const Welcome = ({ welcomeData, onComplete }) => {
                           </div>
                           <Button
                             size="sm"
-                            disabled={isDownloadingProtonCachy}
+                            disabled={cachyOsInstalled || isDownloadingProtonCachy}
                             className="w-full text-secondary"
                             onClick={async () => {
                               if (!protonCachyInfo) {
@@ -2596,8 +2610,10 @@ const Welcome = ({ welcomeData, onComplete }) => {
                           >
                             {isDownloadingProtonCachy ? (
                               <><Loader className="mr-2 h-4 w-4 animate-spin" /> {t("welcome.protonChecking")}</>
+                            ) : cachyOsInstalled ? (
+                              <><CircleCheck className="mr-2 h-4 w-4" /> {t("common.installed")}</>
                             ) : (
-                              <><Download className="mr-2 h-4 w-4" /> {t("welcome.protonInstall")}</>
+                              <><Download className="mr-2 h-4 w-4" /> {t("welcome.protonInstallCachy")}</>
                             )}
                           </Button>
                         </div>

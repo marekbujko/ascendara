@@ -100,6 +100,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/context/SettingsContext";
 import { verifyAscendAccess } from "@/services/firebaseService";
+import ProtonOptionsDialog from "@/components/ProtonOptionsDialog";
 
 const themes = [
   // Light themes
@@ -326,6 +327,7 @@ function Settings() {
   const [isDownloadingUmuProton, setIsDownloadingUmuProton] = useState(false);
   const [umuProtonUpdateStatus, setUmuProtonUpdateStatus] = useState(null);
   const [latestDevCommit, setLatestDevCommit] = useState(null);
+  const [protonOptionsOpen, setProtonOptionsOpen] = useState(false);
   // Default custom colors for merging with saved themes (handles missing new properties)
   const defaultCustomColors = {
     background: "255 255 255",
@@ -2836,6 +2838,33 @@ function Settings() {
                           </option>
                         ))}
                       </select>
+
+                      {(() => {
+                        let activeRunnerName = "";
+                        if (selectedRunner === "auto") {
+                          activeRunnerName = runners[0]?.name?.toLowerCase() || "";
+                        } else {
+                          activeRunnerName = (selectedRunner.split("/").pop() || "").toLowerCase();
+                        }
+                        const runnerType = activeRunnerName.includes("cachyos")
+                          ? "cachyos"
+                          : activeRunnerName.includes("ge-proton") || activeRunnerName.includes("proton-ge")
+                            ? "ge"
+                            : null;
+
+                        if (!runnerType) return null;
+
+                        return (
+                          <Button
+                            size="sm"
+                            className="gap-2 text-secondary"
+                            onClick={() => setProtonOptionsOpen(true)}
+                          >
+                            <SquareTerminal className="h-4 w-4" />
+                            {t("settings.linuxCompat.viewProtonOptions")}
+                          </Button>
+                        );
+                      })()}
                     </div>
 
                     {/* Detected Runners List */}
@@ -2992,18 +3021,18 @@ function Settings() {
                     )}
 
                     {/* Advanced options: Proton-GE alternative */}
-                    <details className="group rounded-lg border border-border">
-                      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-foreground">
+                    <details className="group rounded-lg border border-border bg-muted/30">
+                      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-foreground">
                         {t("settings.linuxCompat.advancedOptions")}
+                        <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
                       </summary>
                       <div className="flex flex-wrap items-center gap-3 border-t border-border p-4">
                         <p className="w-full text-xs text-muted-foreground">
-                          {t("settings.linuxCompat.protonConfirm.description")}
+                          {t("settings.linuxCompat.protonGEAltDescription")}
                         </p>
 
                         {/* Download / Update Proton-GE */}
                         <Button
-                          variant="outline"
                           onClick={async () => {
                             try {
                               const info = await window.electron.getProtonGEInfo();
@@ -3295,6 +3324,22 @@ function Settings() {
                     )}
                   </div>
                 </Card>
+
+                <ProtonOptionsDialog
+                  open={protonOptionsOpen}
+                  onOpenChange={setProtonOptionsOpen}
+                  runnerType={
+                    (() => {
+                      let name = selectedRunner === "auto"
+                        ? (runners[0]?.name?.toLowerCase() || "")
+                        : (selectedRunner.split("/").pop() || "").toLowerCase();
+                      if (name.includes("cachyos")) return "cachyos";
+                      if (name.includes("ge-proton") || name.includes("proton-ge")) return "ge";
+                      return null;
+                    })()
+                  }
+                />
+
                 {/* Proton-GE Download Confirmation Dialog */}
                 <AlertDialog
                   open={showProtonGEConfirm && !!protonGEInfo}
@@ -3360,7 +3405,7 @@ function Settings() {
                             })}
                         </p>
                         <p>
-                          {t("settings.linuxCompat.protonGEAltDescription")}{" "}
+                          {t("settings.linuxCompat.protonConfirm.description")}{" "}
                           <code className="rounded bg-muted px-1 text-xs">
                             ~/.ascendara/runners/
                           </code>
@@ -3370,7 +3415,7 @@ function Settings() {
                     <AlertDialogFooter>
                       <AlertDialogCancel
                         onClick={() => {
-                          setShowProtonConfirm(false);
+                          setShowProtonGEConfirm(false);
                           setProtonGEInfo(null);
                         }}
                       >
