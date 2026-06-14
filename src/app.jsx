@@ -777,6 +777,27 @@ const DiscordRPCTracker = () => {
   const { pathname } = useLocation();
   const { settings } = useSettings();
   const lastPathRef = useRef(null);
+  const idleTimerRef = useRef(null);
+
+  const isDownloadPath = path =>
+    path === "/download" || path === "/downloads" || path === "/torboxdownloads";
+
+  const clearIdleTimer = () => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  };
+
+  const scheduleIdle = () => {
+    clearIdleTimer();
+    idleTimerRef.current = setTimeout(() => {
+      if (!window.electron?.switchRPC) return;
+      if (!settings?.rpcEnabled) return;
+      if (isDownloadPath(lastPathRef.current)) return;
+      window.electron.switchRPC("idle");
+    }, 2 * 60 * 1000);
+  };
 
   useEffect(() => {
     if (!window.electron?.switchRPC) return;
@@ -784,12 +805,18 @@ const DiscordRPCTracker = () => {
     if (lastPathRef.current === pathname) return;
     lastPathRef.current = pathname;
 
-    if (pathname === "/download" || pathname === "/downloads" || pathname === "/torboxdownloads") {
+    if (isDownloadPath(pathname)) {
+      clearIdleTimer();
       window.electron.switchRPC("downloading");
     } else {
       window.electron.switchRPC("default");
+      scheduleIdle();
     }
   }, [pathname, settings?.rpcEnabled]);
+
+  useEffect(() => {
+    return () => clearIdleTimer();
+  }, []);
 
   return null;
 };
