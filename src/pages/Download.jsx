@@ -319,7 +319,7 @@ export default function DownloadPage() {
   const [timemachineSetting, setTimemachineSetting] = useState(false);
   const [showSelectPath, setShowSelectPath] = useState(false);
   const [showTimemachineSelection, setShowTimemachineSelection] = useState(false);
-  const [showNewUserGuide, setShowNewUserGuide] = useState(true);
+  const [showNewUserGuide, setShowNewUserGuide] = useState(false);
   const [lastProcessedUrl, setLastProcessedUrl] = useState(null);
   const [isProcessingUrl, setIsProcessingUrl] = useState(false);
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
