@@ -258,8 +258,6 @@ export default function DownloadPage() {
         setReportReason("");
         setReportDetails("");
         setShowNewUserGuide(false);
-        setGuideStep(0);
-        setGuideImages({});
 
         // Remove the state from history
         window.history.replaceState({}, document.title, location.pathname);
@@ -321,9 +319,7 @@ export default function DownloadPage() {
   const [timemachineSetting, setTimemachineSetting] = useState(false);
   const [showSelectPath, setShowSelectPath] = useState(false);
   const [showTimemachineSelection, setShowTimemachineSelection] = useState(false);
-  const [showNewUserGuide, setShowNewUserGuide] = useState(false);
-  const [guideStep, setGuideStep] = useState(0);
-  const [guideImages, setGuideImages] = useState({});
+  const [showNewUserGuide, setShowNewUserGuide] = useState(true);
   const [lastProcessedUrl, setLastProcessedUrl] = useState(null);
   const [isProcessingUrl, setIsProcessingUrl] = useState(false);
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
@@ -1257,33 +1253,6 @@ export default function DownloadPage() {
   }, [useAscendara, providerPatterns]); // Only register handler when both are ready
 
   useEffect(() => {
-    const loadFileFromPath = async path => {
-      try {
-        const data = await window.electron.getAssetPath(path);
-        if (data) {
-          setGuideImages(prev => ({
-            ...prev,
-            [path]: data,
-          }));
-        }
-      } catch (error) {
-        console.error("Failed to load:", error);
-      }
-    };
-
-    const guideImagePaths = [
-      "/guide/guide-off.png",
-      "/guide/guide-on.png",
-      "/guide/guide-start.png",
-      "/guide/guide-alwaysopen.png",
-      "/guide/guide-open.png",
-      "/guide/guide-downloads.png",
-    ];
-
-    guideImagePaths.forEach(path => loadFileFromPath(path));
-  }, []);
-
-  useEffect(() => {
     setTimemachineSetting(settings.showOldDownloadLinks);
   }, [settings.showOldDownloadLinks]);
 
@@ -1546,69 +1515,8 @@ export default function DownloadPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [navigate]);
 
-  const guideSteps = [
-    {
-      title: t("download.newUserGuide.steps.0.title"),
-      description: (
-        <div>
-          <p>{t("download.newUserGuide.steps.0.description")}</p>
-        </div>
-      ),
-    },
-    {
-      title: t("download.newUserGuide.steps.1.title"),
-      description: t("download.newUserGuide.steps.1.description"),
-      image: guideImages["/guide/guide-off.png"],
-    },
-    {
-      title: t("download.newUserGuide.steps.2.title"),
-      description: t("download.newUserGuide.steps.2.description"),
-      image: guideImages["/guide/guide-on.png"],
-    },
-    {
-      title: t("download.newUserGuide.steps.3.title"),
-      description: t("download.newUserGuide.steps.3.description"),
-      image: guideImages["/guide/guide-start.png"],
-    },
-    {
-      title: t("download.newUserGuide.steps.4.title"),
-      description: t("download.newUserGuide.steps.4.description"),
-      image: guideImages["/guide/guide-alwaysopen.png"],
-    },
-    {
-      title: t("download.newUserGuide.steps.5.title"),
-      description: t("download.newUserGuide.steps.5.description"),
-      image: guideImages["/guide/guide-open.png"],
-    },
-    {
-      title: t("download.newUserGuide.steps.6.title"),
-      description: t("download.newUserGuide.steps.6.description"),
-      image: guideImages["/guide/guide-downloads.png"],
-    },
-  ];
-
-  const handleStartGuide = () => {
-    setGuideStep(1);
-  };
-
-  const handleNextStep = () => {
-    if (guideStep < guideSteps.length) {
-      setGuideStep(guideStep + 1);
-    } else {
-      setSettings({ downloadHandler: true })
-        .then(() => {
-          setShowNewUserGuide(false);
-          setGuideStep(0);
-        })
-        .catch(error => {
-          console.error("Failed to save settings:", error);
-        });
-    }
-  };
-
   const handleCloseGuide = () => {
     setShowNewUserGuide(false);
-    setGuideStep(0);
   };
 
   const checkIfNewUser = async () => {
@@ -3728,64 +3636,45 @@ export default function DownloadPage() {
 
       {/* New User Guide Alert Dialog */}
       <AlertDialog open={showNewUserGuide} onOpenChange={handleCloseGuide}>
-        <AlertDialogContent className="sm:max-w-[425px]">
+        <AlertDialogContent className="sm:max-w-[600px]">
           <AlertDialogHeader>
-            {guideStep === 0 ? (
-              <>
-                <AlertDialogTitle className="text-2xl font-bold text-foreground">
-                  {t("download.newUserGuide.title")}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {t("download.newUserGuide.description")}
-                </AlertDialogDescription>
-              </>
-            ) : (
-              <>
-                <AlertDialogTitle className="text-2xl font-bold text-foreground md:text-xl">
-                  {t(`download.newUserGuide.steps.${guideStep - 1}.title`)}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {t(`download.newUserGuide.steps.${guideStep - 1}.description`)}
-                </AlertDialogDescription>
-                <div className="mt-4 space-y-4">
-                  {guideSteps[guideStep - 1].image && (
-                    <img
-                      src={guideSteps[guideStep - 1].image}
-                      alt={t(`download.newUserGuide.steps.${guideStep - 1}.title`)}
-                      className="w-full rounded-lg border border-border"
-                    />
-                  )}
-                  {guideSteps[guideStep - 1].action && (
-                    <Button
-                      className="w-full"
-                      onClick={guideSteps[guideStep - 1].action.onClick}
-                    >
-                      {guideSteps[guideStep - 1].action.label}
-                    </Button>
-                  )}
-                </div>
-              </>
-            )}
+            <AlertDialogTitle className="text-2xl font-bold text-foreground">
+              {t("download.newUserGuide.title")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("download.newUserGuide.description")}
+            </AlertDialogDescription>
+            <div className="mt-4">
+              <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+                <iframe
+                  className="absolute left-0 top-0 h-full w-full rounded-lg"
+                  src="https://www.youtube.com/embed/1SwhCFKbhFU?si=BZ3qSKaCwSjkQfBb"
+                  title="YouTube video player"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allowFullScreen
+                />
+              </div>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="text-primary" onClick={handleCloseGuide}>
-              {guideStep === 0
-                ? t("download.newUserGuide.noThanks")
-                : t("download.newUserGuide.close")}
+              {t("download.newUserGuide.noThanks")}
             </AlertDialogCancel>
             <Button
               className="text-secondary"
-              onClick={guideStep === 0 ? handleStartGuide : handleNextStep}
+              onClick={() => {
+                setSettings({ downloadHandler: true })
+                  .then(() => {
+                    setShowNewUserGuide(false);
+                  })
+                  .catch(error => {
+                    console.error("Failed to save settings:", error);
+                  });
+              }}
             >
-              {guideStep === 0
-                ? t("download.newUserGuide.startGuide")
-                : guideStep === guideSteps.length
-                  ? t("download.newUserGuide.finish")
-                  : guideStep === 1
-                    ? t("download.newUserGuide.installed")
-                    : guideStep === 2
-                      ? t("download.newUserGuide.handlerEnabled")
-                      : t("download.newUserGuide.nextStep")}
+              {t("download.newUserGuide.finish")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
