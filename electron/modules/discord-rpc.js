@@ -242,6 +242,9 @@ function setPlayingActivity(gameName) {
  * @param {string} state - State to set ("default", "downloading")
  */
 function setRPCState(state) {
+  if (isDev) {
+    return;
+  }
   if (!rpc || !rpcIsConnected) {
     console.log("Discord RPC not connected, skipping activity update");
     return;
