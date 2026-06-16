@@ -251,7 +251,17 @@ const GameCard = memo(function GameCard({ game, compact }) {
         delete meta[game.game];
       } else {
         updated = [...favorites, game.game];
-        meta[game.game] = { imgID: game.imgID || null, gameID: game.gameID || null };
+        meta[game.game] = {
+          imgID: game.imgID || null,
+          gameID: game.gameID || null,
+          version: game.version || null,
+          size: game.size || null,
+          category: game.category || null,
+          dlc: game.dlc || false,
+          online: game.online || false,
+          download_links: game.download_links || null,
+          desc: game.desc || null,
+        };
       }
       localStorage.setItem("game-favorites", JSON.stringify(updated));
       localStorage.setItem("game-favorites-meta", JSON.stringify(meta));

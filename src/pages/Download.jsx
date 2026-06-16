@@ -2110,7 +2110,17 @@ export default function DownloadPage() {
                                   delete meta[gameData.game];
                                 } else {
                                   updated = [...favs, gameData.game];
-                                  meta[gameData.game] = { imgID: gameData.imgID || null, gameID: gameData.gameID || null };
+                                  meta[gameData.game] = {
+                                    imgID: gameData.imgID || null,
+                                    gameID: gameData.gameID || null,
+                                    version: gameData.version || null,
+                                    size: gameData.size || null,
+                                    category: gameData.category || null,
+                                    dlc: gameData.dlc || false,
+                                    online: gameData.online || false,
+                                    download_links: gameData.download_links || null,
+                                    desc: gameData.desc || null,
+                                  };
                                 }
                                 localStorage.setItem("game-favorites", JSON.stringify(updated));
                                 localStorage.setItem("game-favorites-meta", JSON.stringify(meta));

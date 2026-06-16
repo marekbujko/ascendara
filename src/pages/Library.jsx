@@ -1964,8 +1964,7 @@ const Library = () => {
                 game: name,
                 name,
                 _isStub: true,
-                imgID: favMeta[name]?.imgID || null,
-                gameID: favMeta[name]?.gameID || null,
+                ...(favMeta[name] || {}),
               }));
             const favGames = [
               ...games.filter(g => !g.isFolder && favorites.includes(g.game || g.name)),
@@ -2120,7 +2119,26 @@ const Library = () => {
                         rating={gameRatings[game.game || game.name] || 0}
                         onRate={rating => setGameRating(game.game || game.name, rating)}
                         onPlay={() => !game._isStub && handlePlayGame(game)}
-                        onDownload={game._isStub ? () => navigate("/download", { state: { gameData: game } }) : undefined}
+                        onDownload={game._isStub ? async () => {
+                          // Look up full game data from local index so the Download page
+                          // receives download_links, version, size, etc.
+                          const favMeta = JSON.parse(localStorage.getItem("game-favorites-meta") || "{}");
+                          const meta = favMeta[game.game || game.name] || {};
+                          let fullGame = null;
+                          const gid = game.gameID || meta.gameID;
+                          if (gid) {
+                            try {
+                              fullGame = await gameService.findGameByGameID(gid);
+                            } catch { /* fall through */ }
+                          }
+                          if (!fullGame && (game.game || game.name)) {
+                            try {
+                              const results = await gameService.searchGames(game.game || game.name);
+                              fullGame = results.find(r => r.game === (game.game || game.name)) || null;
+                            } catch { /* fall through */ }
+                          }
+                          navigate("/download", { state: { gameData: fullGame || { ...game, ...meta } } });
+                        } : undefined}
                         onUnfavorite={() => toggleFavorite(game.game || game.name)}
                       />
                     ))}
