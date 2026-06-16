@@ -1533,27 +1533,6 @@ const Library = () => {
             <>
               <DndProvider backend={HTML5Backend}>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {activeTab === "all" && (
-                    <button
-                      key="add-game-inline"
-                      onClick={() => setIsAddGameOpen(true)}
-                      className="group flex flex-col overflow-hidden rounded-xl border border-dashed border-border cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
-                    >
-                      <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted/20 group-hover:bg-primary/5 transition-colors">
-                        <div className="flex flex-col items-center gap-2">
-                          <div className="rounded-full bg-muted p-3 group-hover:bg-primary/10 transition-colors">
-                            <Plus className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="px-3 py-2">
-                        <p className="truncate text-sm mt-2 font-semibold leading-tight text-muted-foreground group-hover:text-primary transition-colors">
-                          {t("library.addGame.title")}
-                        </p>
-                        <p className="text-xs text-muted-foreground/50">&nbsp;</p>
-                      </div>
-                    </button>
-                  )}
                   {tabPaginatedGames
                     .sort((a, b) => (a.isFolder === b.isFolder ? 0 : a.isFolder ? -1 : 1))
                     .map(game => (
