@@ -3486,6 +3486,8 @@ const InstalledGameDetailsView = ({ game, onBack, t, controllerType, onChangeAss
   useEffect(() => {
     const handleKeyDown = e => {
       if (e.repeat) return;
+      // Block keyboard input when game is running or launching
+      if (isRunning || isLaunching) return;
       const map = {
         ArrowDown: "DOWN",
         ArrowUp: "UP",
@@ -3505,12 +3507,17 @@ const InstalledGameDetailsView = ({ game, onBack, t, controllerType, onChangeAss
     };
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [handleInput]);
+  }, [handleInput, isRunning, isLaunching]);
 
   // Gamepad Polling
   useEffect(() => {
     let rAF;
     const loop = () => {
+      // Block input when game is running or launching
+      if (isRunning || isLaunching) {
+        rAF = requestAnimationFrame(loop);
+        return;
+      }
       if (showExecutableManager || showDirectoryBrowser) {
         rAF = requestAnimationFrame(loop);
         return;
@@ -3549,7 +3556,7 @@ const InstalledGameDetailsView = ({ game, onBack, t, controllerType, onChangeAss
     };
     loop();
     return () => cancelAnimationFrame(rAF);
-  }, [handleInput, canInput]);
+  }, [handleInput, canInput, isRunning, isLaunching]);
 
   const formatPlayTime = time => {
     if (!time || time < 60) return t("library.notPlayedYet");
