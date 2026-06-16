@@ -1594,11 +1594,11 @@
   "home": {
     "actionGames": "Action Games",
     "footer": {
-      "description": "Ascendara is built and maintained by a single developer as a passion project. Your support funds Ascendaras servers, keeps the app ad-free, and motivates continuous improvement for everyone.",
+      "description": "Ascendara is built and maintained by a single developer as a passion project. Sharing Ascendara with others helps it grow and reach more users.",
       "donate": "Support Development",
       "github": "View on GitHub",
-      "madeWith": "Made with ❤️ by Santiago",
-      "title": "Help Keep Ascendara Free"
+      "madeWith": "Made with ❤️ by Santiago & Contributors",
+      "title": "Consider Spreading the Word"
     },
     "mostRecentlyUpdated": "Most Recently Updated",
     "noRecentGames": "Your top 3 recent games show here",
