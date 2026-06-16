@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, memo } from "react";
+import React, { useState, useEffect, useRef, useCallback, memo, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,9 @@ import {
   Layers,
   Timer,
   HardDriveDownload,
+  Star,
+  SlidersHorizontal,
+  GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -161,6 +164,12 @@ const Library = () => {
     const savedFavorites = localStorage.getItem("game-favorites");
     return savedFavorites ? JSON.parse(savedFavorites) : [];
   });
+  const [gameRatings, setGameRatings] = useState(() => {
+    const saved = localStorage.getItem("game-ratings");
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [favGallerySortMode, setFavGallerySortMode] = useState(() => localStorage.getItem("fav-gallery-sort") || "rating");
+  const [favGalleryGenreFilter, setFavGalleryGenreFilter] = useState("all");
   const [totalGamesSize, setTotalGamesSize] = useState(0);
   const [isCalculatingSize, setIsCalculatingSize] = useState(false);
   const [showStorageDetails, setShowStorageDetails] = useState(false);
@@ -187,7 +196,17 @@ const Library = () => {
   });
   const [isCalculatingValue, setIsCalculatingValue] = useState(false);
   const [valueProgress, setValueProgress] = useState({ current: 0, total: 0, game: "" });
-  const [activeTab, setActiveTab] = useState("all"); // "all" | "favorites" | "cloud" | "playLater"
+  const [sidebarTabOrder, setSidebarTabOrder] = useState(() => {
+    const saved = localStorage.getItem("library-tab-order");
+    return saved ? JSON.parse(saved) : ["all", "favoritesGallery", "cloud", "playLater"];
+  });
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem("library-tab-order");
+    const order = saved ? JSON.parse(saved) : ["all", "favoritesGallery", "cloud", "playLater"];
+    return order[0] || "all";
+  }); // "all" | "favoritesGallery" | "cloud" | "playLater"
+  const dragTabRef = useRef(null);
+  const dragOverTabRef = useRef(null);
   const [groupBy, setGroupBy] = useState(() => localStorage.getItem("library-groupBy") || "none"); // "none" | "directory"
   const [sortMode, setSortMode] = useState(() => localStorage.getItem("library-sortMode") || "alpha"); // "alpha" | "playtime"
   const { t } = useLanguage();
@@ -208,6 +227,18 @@ const Library = () => {
   useEffect(() => {
     safeSetItem("game-favorites", JSON.stringify(favorites));
   }, [favorites]);
+
+  useEffect(() => {
+    safeSetItem("game-ratings", JSON.stringify(gameRatings));
+  }, [gameRatings]);
+
+  useEffect(() => {
+    safeSetItem("fav-gallery-sort", favGallerySortMode);
+  }, [favGallerySortMode]);
+
+  const setGameRating = (gameName, rating) => {
+    setGameRatings(prev => ({ ...prev, [gameName]: rating }));
+  };
 
   useEffect(() => {
     const checkRedesignDialog = async () => {
@@ -1128,8 +1159,8 @@ const Library = () => {
       count: games.filter(g => !g.isFolder).length + getGamesInFolders().length,
     },
     {
-      id: "favorites",
-      label: t("library.filters.favorites.label") || "Favorites",
+      id: "favoritesGallery",
+      label: t("library.favoritesGallery.title") || "Favorites",
       icon: <Heart className="h-4 w-4" />,
       count: favorites.length,
     },
@@ -1145,7 +1176,7 @@ const Library = () => {
       label: t("library.playLater.title") || "Play Later",
       icon: <Clock className="h-4 w-4" />,
       count: playLaterGames.length,
-    },
+    }
   ].filter(tab => !tab.hidden);
 
   return (
@@ -1260,36 +1291,72 @@ const Library = () => {
         {/* ── Library views ── */}
         <nav className="space-y-0.5 px-2 pt-3">
           <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Library</p>
-          {sidebarTabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => { setActiveTab(tab.id); setCurrentPage(1); }}
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all",
-                activeTab === tab.id
-                  ? "bg-primary/10 font-semibold text-primary"
-                  : "font-medium text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-              )}
-            >
-              <span className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
-                activeTab === tab.id ? "bg-primary/15 text-primary" : "text-muted-foreground"
-              )}>
-                {tab.icon}
-              </span>
-              <span className="flex-1 text-left">{tab.label}</span>
-              {tab.count > 0 && (
-                <span className={cn(
-                  "min-w-[1.25rem] rounded px-1 py-0.5 text-center text-[10px] font-bold tabular-nums",
-                  activeTab === tab.id
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted/80 text-muted-foreground"
-                )}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
+          {(() => {
+            const orderedTabs = [
+              ...sidebarTabOrder
+                .map(id => sidebarTabs.find(t => t.id === id))
+                .filter(Boolean),
+              ...sidebarTabs.filter(t => !sidebarTabOrder.includes(t.id)),
+            ];
+            return orderedTabs.map((tab, index) => (
+              <div
+                key={tab.id}
+                onDragEnter={() => { dragOverTabRef.current = index; }}
+                onDragOver={e => e.preventDefault()}
+                className="group/drag relative"
+              >
+                {/* Grip handle — absolutely positioned, doesn't affect layout */}
+                <div
+                  draggable
+                  onDragStart={e => { e.stopPropagation(); dragTabRef.current = index; }}
+                  onDragEnd={e => {
+                    e.stopPropagation();
+                    const from = dragTabRef.current;
+                    const to = dragOverTabRef.current;
+                    if (from === null || to === null || from === to) { dragTabRef.current = null; dragOverTabRef.current = null; return; }
+                    const newOrder = orderedTabs.map(t => t.id);
+                    const [moved] = newOrder.splice(from, 1);
+                    newOrder.splice(to, 0, moved);
+                    setSidebarTabOrder(newOrder);
+                    safeSetItem("library-tab-order", JSON.stringify(newOrder));
+                    dragTabRef.current = null;
+                    dragOverTabRef.current = null;
+                  }}
+                  className="absolute right-1 top-1/2 z-10 -translate-y-1/2 cursor-grab p-1 text-muted-foreground/25 opacity-0 transition-opacity group-hover/drag:opacity-100 active:cursor-grabbing"
+                >
+                  <GripVertical className="h-3 w-3" />
+                </div>
+
+                <button
+                  onClick={() => { setActiveTab(tab.id); setCurrentPage(1); }}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all",
+                    activeTab === tab.id
+                      ? "bg-primary/10 font-semibold text-primary"
+                      : "font-medium text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                  )}
+                >
+                  <span className={cn(
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
+                    activeTab === tab.id ? "bg-primary/15 text-primary" : "text-muted-foreground"
+                  )}>
+                    {tab.icon}
+                  </span>
+                  <span className="flex-1 text-left">{tab.label}</span>
+                  {tab.count > 0 && (
+                    <span className={cn(
+                      "min-w-[1.25rem] rounded px-1 py-0.5 text-center text-[10px] font-bold tabular-nums transition-transform duration-150 group-hover/drag:translate-x-[-14px]",
+                      activeTab === tab.id
+                        ? "bg-primary/20 text-primary"
+                        : "bg-muted/80 text-muted-foreground"
+                    )}>
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              </div>
+            ));
+          })()}
         </nav>
 
         {/* ── Actions ── */}
@@ -1476,7 +1543,10 @@ const Library = () => {
               type="text"
               placeholder={t("library.searchLibrary")}
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                if (e.target.value && activeTab !== "all") { setActiveTab("all"); setCurrentPage(1); }
+              }}
               className="h-9 pl-9"
             />
           </div>
@@ -1484,45 +1554,105 @@ const Library = () => {
           <TooltipProvider>
             <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
               <DropdownMenuTrigger asChild>
-                <button className="rounded-md p-2 hover:bg-secondary/50" type="button">
-                  <SortAscIcon className="h-4 w-4" />
-                </button>
+                {(() => {
+                  const activeFilterCount = [filters.vrOnly, filters.onlineGames].filter(Boolean).length;
+                  const hasActiveFilters = activeFilterCount > 0 || sortMode !== "alpha" || groupBy !== "none";
+                  return (
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-all",
+                        hasActiveFilters
+                          ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/15"
+                          : "border-border/60 bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+                      )}
+                    >
+                      <SlidersHorizontal className="h-4 w-4 shrink-0" />
+                      <span>{t("search.filters") || "Filter"}</span>
+                      {hasActiveFilters && (
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-secondary">
+                          {activeFilterCount + (sortMode !== "alpha" ? 1 : 0) + (groupBy !== "none" ? 1 : 0)}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem onClick={() => { setSortOrder("asc"); setSortMode("alpha"); }} className={cn("cursor-pointer", sortMode === "alpha" && sortOrder === "asc" && "bg-accent/50")}>
-                  <ArrowUpAZ className="mr-2 h-4 w-4" />
-                  {t("library.sort.aToZ")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setSortOrder("desc"); setSortMode("alpha"); }} className={cn("cursor-pointer", sortMode === "alpha" && sortOrder === "desc" && "bg-accent/50")}>
-                  <ArrowDownAZ className="mr-2 h-4 w-4" />
-                  {t("library.sort.zToA")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortMode("playtime")} className={cn("cursor-pointer", sortMode === "playtime" && "bg-accent/50")}>
-                  <Timer className="mr-2 h-4 w-4" />
-                  {t("library.sort.mostPlayed")}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{t("library.sort.groupBy")}</p>
-                <DropdownMenuItem onClick={() => setGroupBy("none")} className={cn("cursor-pointer", groupBy === "none" && "bg-accent/50")}>
-                  <SquareLibrary className="mr-2 h-4 w-4" />
-                  {t("library.sort.groupNone")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setGroupBy("directory")} className={cn("cursor-pointer", groupBy === "directory" && "bg-accent/50")}>
-                  <HardDriveDownload className="mr-2 h-4 w-4" />
-                  {t("library.sort.groupByDirectory")}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuCheckboxItem className="cursor-pointer" checked={filters.vrOnly} onCheckedChange={checked => setFilters(prev => ({ ...prev, vrOnly: checked }))}>
-                  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M2 10C2 8.89543 2.89543 8 4 8H20C21.1046 8 22 8.89543 22 10V17C22 18.1046 21.1046 19 20 19H16.1324C15.4299 19 14.7788 18.6314 14.4174 18.029L12.8575 15.4292C12.4691 14.7818 11.5309 14.7818 11.1425 15.4292L9.58261 18.029C9.22116 18.6314 8.57014 19 7.86762 19H4C2.89543 19 2 18.1046 2 17V10Z" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M3.81253 6.7812C4.5544 5.6684 5.80332 5 7.14074 5H16.8593C18.1967 5 19.4456 5.6684 20.1875 6.7812L21 8H3L3.81253 6.7812Z" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+              <DropdownMenuContent align="end" className="w-56 p-1.5">
+                {/* Sort section */}
+                <p className="px-2 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{t("library.sort.aToZ").replace("Sort ", "") === "A to Z" ? "Sort" : "Sort"}</p>
+                {[
+                  { label: t("library.sort.aToZ"), icon: <ArrowUpAZ className="h-4 w-4" />, active: sortMode === "alpha" && sortOrder === "asc", onClick: () => { setSortOrder("asc"); setSortMode("alpha"); } },
+                  { label: t("library.sort.zToA"), icon: <ArrowDownAZ className="h-4 w-4" />, active: sortMode === "alpha" && sortOrder === "desc", onClick: () => { setSortOrder("desc"); setSortMode("alpha"); } },
+                  { label: t("library.sort.mostPlayed"), icon: <Timer className="h-4 w-4" />, active: sortMode === "playtime", onClick: () => setSortMode("playtime") },
+                ].map(item => (
+                  <DropdownMenuItem
+                    key={item.label}
+                    onClick={item.onClick}
+                    className={cn(
+                      "cursor-pointer rounded-md px-2 py-1.5",
+                      item.active ? "bg-primary/10 text-primary font-medium" : "text-foreground"
+                    )}
+                  >
+                    <span className={cn("mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-md", item.active ? "bg-primary/20 text-primary" : "bg-muted/60 text-muted-foreground")}>
+                      {item.icon}
+                    </span>
+                    {item.label}
+                    {item.active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+                  </DropdownMenuItem>
+                ))}
+
+                <DropdownMenuSeparator className="my-1.5" />
+
+                {/* Group By section */}
+                <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{t("library.sort.groupBy")}</p>
+                {[
+                  { label: t("library.sort.groupNone"), icon: <SquareLibrary className="h-4 w-4" />, active: groupBy === "none", onClick: () => setGroupBy("none") },
+                  { label: t("library.sort.groupByDirectory"), icon: <HardDriveDownload className="h-4 w-4" />, active: groupBy === "directory", onClick: () => setGroupBy("directory") },
+                ].map(item => (
+                  <DropdownMenuItem
+                    key={item.label}
+                    onClick={item.onClick}
+                    className={cn(
+                      "cursor-pointer rounded-md px-2 py-1.5",
+                      item.active ? "bg-primary/10 text-primary font-medium" : "text-foreground"
+                    )}
+                  >
+                    <span className={cn("mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-md", item.active ? "bg-primary/20 text-primary" : "bg-muted/60 text-muted-foreground")}>
+                      {item.icon}
+                    </span>
+                    {item.label}
+                    {item.active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+                  </DropdownMenuItem>
+                ))}
+
+                <DropdownMenuSeparator className="my-1.5" />
+
+                {/* Filters section */}
+                <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{t("search.filters") || "Filters"}</p>
+                <DropdownMenuItem
+                  onClick={() => setFilters(prev => ({ ...prev, vrOnly: !prev.vrOnly }))}
+                  className={cn("cursor-pointer rounded-md px-2 py-1.5", filters.vrOnly ? "bg-primary/10 text-primary font-medium" : "text-foreground")}
+                >
+                  <span className={cn("mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-md", filters.vrOnly ? "bg-primary/20 text-primary" : "bg-muted/60 text-muted-foreground")}>
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M2 10C2 8.89543 2.89543 8 4 8H20C21.1046 8 22 8.89543 22 10V17C22 18.1046 21.1046 19 20 19H16.1324C15.4299 19 14.7788 18.6314 14.4174 18.029L12.8575 15.4292C12.4691 14.7818 11.5309 14.7818 11.1425 15.4292L9.58261 18.029C9.22116 18.6314 8.57014 19 7.86762 19H4C2.89543 19 2 18.1046 2 17V10Z" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M3.81253 6.7812C4.5544 5.6684 5.80332 5 7.14074 5H16.8593C18.1967 5 19.4456 5.6684 20.1875 6.7812L21 8H3L3.81253 6.7812Z" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
                   {t("library.filters.vrGames")}
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem className="cursor-pointer" checked={filters.onlineGames} onCheckedChange={checked => setFilters(prev => ({ ...prev, onlineGames: checked }))}>
-                  <Gamepad2 className="mr-2 h-4 w-4" />
+                  {filters.vrOnly && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setFilters(prev => ({ ...prev, onlineGames: !prev.onlineGames }))}
+                  className={cn("cursor-pointer rounded-md px-2 py-1.5", filters.onlineGames ? "bg-primary/10 text-primary font-medium" : "text-foreground")}
+                >
+                  <span className={cn("mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-md", filters.onlineGames ? "bg-primary/20 text-primary" : "bg-muted/60 text-muted-foreground")}>
+                    <Gamepad2 className="h-4 w-4" />
+                  </span>
                   {t("library.filters.onlineGames")}
-                </DropdownMenuCheckboxItem>
+                  {filters.onlineGames && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -1561,6 +1691,40 @@ const Library = () => {
 
         {/* Scrollable game grid */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* ── Tab page header ── */}
+          {activeTab !== "favoritesGallery" && (() => {
+            const tabMeta = {
+              all: {
+                icon: <SquareLibrary className="h-5 w-5 text-primary" />,
+                title: t("library.pageTitle") || "My Library",
+                subtitle: t("library.pageSubtitle") || "All your installed games in one place.",
+              },
+              cloud: {
+                icon: <Cloud className="h-5 w-5 text-primary" />,
+                title: t("library.cloudOnly.title") || "Cloud Library",
+                subtitle: t("library.cloudOnly.subtitle") || "Games stored in your cloud backup.",
+              },
+              playLater: {
+                icon: <Clock className="h-5 w-5 text-primary" />,
+                title: t("library.playLater.title") || "Play Later",
+                subtitle: t("library.playLater.subtitle") || "Games you've saved to download later.",
+              },
+            };
+            const meta = tabMeta[activeTab];
+            if (!meta) return null;
+            return (
+              <div className="mb-6 flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                  {React.cloneElement(meta.icon, { className: "h-6 w-6 text-primary" })}
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold leading-tight text-foreground">{meta.title}</h2>
+                  <p className="mt-0.5 text-sm text-muted-foreground">{meta.subtitle}</p>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ── All Games / Favorites tab ── */}
           {(activeTab === "all" || activeTab === "favorites") && (() => {
             const renderGameCard = game => (
@@ -1735,6 +1899,167 @@ const Library = () => {
               )}
             </>
           )}
+
+          {/* ── Favorites Gallery tab ── */}
+          {activeTab === "favoritesGallery" && (() => {
+            const favGames = games.filter(g => !g.isFolder && favorites.includes(g.game || g.name));
+
+            // Collect all genres from favorite games
+            const genreSet = new Set();
+            favGames.forEach(g => {
+              const cats = Array.isArray(g.category) ? g.category : [];
+              cats.forEach(c => genreSet.add(c));
+            });
+            const allGenres = ["all", ...Array.from(genreSet).sort()];
+
+            // Filter by genre
+            const genreFiltered = favGalleryGenreFilter === "all"
+              ? favGames
+              : favGames.filter(g => {
+                  const cats = Array.isArray(g.category) ? g.category : [];
+                  return cats.includes(favGalleryGenreFilter);
+                });
+
+            // Sort
+            const sorted = [...genreFiltered].sort((a, b) => {
+              const aName = a.game || a.name || "";
+              const bName = b.game || b.name || "";
+              switch (favGallerySortMode) {
+                case "rating": {
+                  const ar = gameRatings[aName] || 0;
+                  const br = gameRatings[bName] || 0;
+                  return br !== ar ? br - ar : aName.localeCompare(bName);
+                }
+                case "playtime": {
+                  const at = a.playTime || 0;
+                  const bt = b.playTime || 0;
+                  return bt !== at ? bt - at : aName.localeCompare(bName);
+                }
+                case "recentlyPlayed": {
+                  const al = a.lastPlayed || 0;
+                  const bl = b.lastPlayed || 0;
+                  return bl - al;
+                }
+                case "recentlyAdded": {
+                  const aa = a.addedAt || 0;
+                  const ba = b.addedAt || 0;
+                  return ba - aa;
+                }
+                case "alpha":
+                default:
+                  return aName.localeCompare(bName);
+              }
+            });
+
+            const sortOptions = [
+              { id: "rating", label: t("library.favoritesGallery.sort.highestRating") || "Highest Rating" },
+              { id: "playtime", label: t("library.favoritesGallery.sort.mostPlayed") || "Most Played" },
+              { id: "recentlyPlayed", label: t("library.favoritesGallery.sort.recentlyPlayed") || "Recently Played" },
+              { id: "recentlyAdded", label: t("library.favoritesGallery.sort.recentlyAdded") || "Recently Added" },
+              { id: "alpha", label: t("library.sort.aToZ") || "A → Z" },
+            ];
+
+            return (
+              <div className="space-y-5">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                        <Heart className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold leading-tight text-foreground">
+                          {t("library.favoritesGallery.title") || "Favorites"}
+                        </h2>
+                        <p className="mt-0.5 text-sm text-muted-foreground">
+                          {t("library.favoritesGallery.subtitle") || "Your favorite games, rated and organized by you."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sort dropdown */}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent">
+                          <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                          {t("library.favoritesGallery.sortBy") || "Sort by"}
+                          <span className="ml-1 text-primary">
+                            {sortOptions.find(s => s.id === favGallerySortMode)?.label || "Highest Rating"}
+                          </span>
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        {sortOptions.map(opt => (
+                          <DropdownMenuItem
+                            key={opt.id}
+                            className={cn("cursor-pointer", favGallerySortMode === opt.id && "bg-accent/50 font-semibold text-primary")}
+                            onClick={() => setFavGallerySortMode(opt.id)}
+                          >
+                            {opt.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+
+                {/* Genre filter chips */}
+                {allGenres.length > 1 && (
+                  <div className="flex flex-wrap gap-2">
+                    {allGenres.map(genre => {
+                      const count = genre === "all"
+                        ? favGames.length
+                        : favGames.filter(g => (Array.isArray(g.category) ? g.category : []).includes(genre)).length;
+                      return (
+                        <button
+                          key={genre}
+                          onClick={() => setFavGalleryGenreFilter(genre)}
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-all",
+                            favGalleryGenreFilter === genre
+                              ? "bg-primary text-secondary shadow-sm"
+                              : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          <span className="capitalize">{genre === "all" ? (t("library.favoritesGallery.allGames") || "All Games") : genre}</span>
+                          <span className={cn(
+                            "rounded px-1 py-0.5 text-[10px] font-bold tabular-nums",
+                            favGalleryGenreFilter === genre ? "bg-secondary/20 text-secondary" : "bg-muted text-muted-foreground"
+                          )}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Gallery grid */}
+                {sorted.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                    <Heart className="mb-4 h-12 w-12 text-muted-foreground/30" />
+                    <p className="text-sm font-medium text-foreground">{t("library.favoritesGallery.empty") || "No favorites yet"}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{t("library.favoritesGallery.emptyHint") || "Hover over a game and click the heart icon to add it here."}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {sorted.map(game => (
+                      <FavoritesGalleryCard
+                        key={game.game || game.name}
+                        game={game}
+                        rating={gameRatings[game.game || game.name] || 0}
+                        onRate={rating => setGameRating(game.game || game.name, rating)}
+                        onPlay={() => handlePlayGame(game)}
+                        onUnfavorite={() => toggleFavorite(game.game || game.name)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -1983,6 +2308,198 @@ const AddGameCard = React.forwardRef((props, ref) => {
 });
 
 AddGameCard.displayName = "AddGameCard";
+
+let ratingDisclaimerShownThisSession = false;
+
+const StarRating = ({ value, onChange, size = "sm" }) => {
+  const [hovered, setHovered] = useState(null);
+  const iconClass = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map(star => {
+        const filled = (hovered ?? value) >= star;
+        return (
+          <button
+            key={star}
+            type="button"
+            className="focus:outline-none"
+            onMouseEnter={() => setHovered(star)}
+            onMouseLeave={() => setHovered(null)}
+            onClick={e => { e.stopPropagation(); onChange(value === star ? 0 : star); }}
+          >
+            <Star
+              className={cn(
+                iconClass,
+                "transition-colors",
+                filled ? "fill-yellow-400 text-yellow-400" : "fill-none text-muted-foreground/50 hover:text-yellow-300"
+              )}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+const FavoritesGalleryCard = memo(({ game, rating, onRate, onPlay, onUnfavorite }) => {
+  const { t } = useLanguage();
+  const [imageData, setImageData] = useState(() => gameImageCache.get(game.game || game.name) ?? null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [pendingRating, setPendingRating] = useState(null);
+  const [showRatingDisclaimer, setShowRatingDisclaimer] = useState(false);
+
+  const handleRate = newRating => {
+    if (!ratingDisclaimerShownThisSession) {
+      setPendingRating(newRating);
+      setShowRatingDisclaimer(true);
+    } else {
+      onRate(newRating);
+    }
+  };
+  const gameName = game.game || game.name || "";
+  const categories = Array.isArray(game.category) ? game.category.slice(0, 2) : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    const gameId = game.game || game.name;
+    if (gameImageCache.has(gameId)) {
+      setImageData(gameImageCache.get(gameId));
+      return;
+    }
+    (async () => {
+      try {
+        const base64 = await window.electron.getGameImage(gameId);
+        if (!cancelled && base64) {
+          const dataUrl = `data:image/jpeg;base64,${base64}`;
+          gameImageCache.set(gameId, dataUrl);
+          setImageData(dataUrl);
+        }
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [game.game, game.name]);
+
+  const formatPlaytime = secs => {
+    if (!secs || secs < 60) return t("library.neverPlayed") || "Never played";
+    if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+    return `${Math.floor(secs / 3600)}h`;
+  };
+
+  return (
+    <>
+      <AlertDialog open={showRatingDisclaimer} onOpenChange={setShowRatingDisclaimer}>
+        <AlertDialogContent className="sm:max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Star className="h-4 w-4 text-yellow-400" />
+              {t("library.favoritesGallery.ratingDisclaimer.title") || "Personal Rating"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("library.favoritesGallery.ratingDisclaimer.description") || "This rating is stored locally on your device only. It's purely personal and is never shared, posted, or submitted anywhere."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => {
+              ratingDisclaimerShownThisSession = true;
+              setShowRatingDisclaimer(false);
+              if (pendingRating !== null) { onRate(pendingRating); setPendingRating(null); }
+            }}>
+              {t("common.gotIt") || "Got it"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+    <Card
+      className={cn(
+        "group relative overflow-hidden rounded-xl border border-border bg-card shadow-md transition-all duration-200",
+        "hover:-translate-y-1 hover:shadow-2xl hover:border-primary/40",
+        "cursor-pointer"
+      )}
+      onClick={onPlay}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <CardContent className="p-0">
+        <div className="relative aspect-[2/3] overflow-hidden">
+          {imageData ? (
+            <img
+              src={imageData}
+              alt={gameName}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-muted">
+              <Gamepad2 className="h-12 w-12 text-muted-foreground/30" />
+            </div>
+          )}
+
+          {/* Star badge top-left */}
+          {rating > 0 && (
+            <div className="absolute left-2 top-2 z-20 flex items-center gap-0.5 rounded-md bg-black/60 px-1.5 py-0.5 backdrop-blur-sm">
+              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+              <span className="text-[11px] font-bold text-white">{rating}.0</span>
+            </div>
+          )}
+
+          {/* Hover overlay */}
+          <div className={cn(
+            "absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/30 to-transparent p-3 transition-opacity duration-200",
+            isHovered ? "opacity-100" : "opacity-0"
+          )}>
+            <p className="mb-1.5 line-clamp-2 text-sm font-bold leading-tight text-white">{gameName}</p>
+
+            {/* Genre chips */}
+            {categories.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1">
+                {categories.map(cat => (
+                  <span key={cat} className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90">{cat}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Playtime row */}
+            <div className="mb-2 flex items-center gap-1.5 text-xs text-white/70">
+              <Clock className="h-3 w-3 shrink-0" />
+              <span>{formatPlaytime(game.playTime)}</span>
+            </div>
+
+            {/* Star rating row */}
+            <div className="flex items-center justify-between">
+              <StarRating value={rating} onChange={handleRate} />
+              <button
+                type="button"
+                className="rounded-md p-1 hover:bg-white/20"
+                onClick={e => { e.stopPropagation(); onUnfavorite(); }}
+                title={t("library.favoritesGallery.removeFromFavorites") || "Remove from favorites"}
+              >
+                <Heart className="h-4 w-4 fill-primary text-primary" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+      <CardFooter className="flex flex-col items-start gap-0.5 px-3 py-2">
+        <h3 className="w-full truncate text-sm font-semibold leading-tight text-foreground">{gameName}</h3>
+        <div className="flex w-full items-center justify-between">
+          <p className="text-xs text-muted-foreground">{formatPlaytime(game.playTime)}</p>
+          {rating > 0 ? (
+            <div className="flex items-center gap-0.5">
+              {[1,2,3,4,5].map(s => (
+                <Star key={s} className={cn("h-2.5 w-2.5", s <= rating ? "fill-yellow-400 text-yellow-400" : "fill-none text-muted-foreground/30")} />
+              ))}
+            </div>
+          ) : (
+            <span className="text-[10px] text-muted-foreground/50">{t("library.favoritesGallery.noRating") || "Unrated"}</span>
+          )}
+        </div>
+      </CardFooter>
+    </Card>
+    </>
+  );
+});
+
+FavoritesGalleryCard.displayName = "FavoritesGalleryCard";
 
 const InstalledGameCard = memo(
   ({

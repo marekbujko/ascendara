@@ -981,6 +981,7 @@
     "bigpicture": "Big Picture",
     "cancel": "Cancel",
     "close": "Close",
+    "gotIt": "Got it",
     "contextMenu": {
       "deleteGame": "Delete Game",
       "deleteGameDescription": "Permanently delete game",
@@ -1515,8 +1516,8 @@
     "editGameEntryInvalidJson": "Invalid JSON — please fix the errors before saving.",
     "playTrack": "Play Track",
     "popularMods": "Popular Mods",
-    "rateNow": "Rate",
-    "rateThisGame": "Leave a Rating?",
+    "rateNow": "Review",
+    "rateThisGame": "Leave a Review?",
     "screenshots": "Screenshots",
     "searchMods": "Search mods...",
     "showingMods": "Showing {{from}} to {{to}} of {{total}} mods",
@@ -1868,6 +1869,7 @@
     "openFolder": "Open",
     "openGameDirectory": "Open Game Directory",
     "pageTitle": "Your Library",
+    "pageSubtitle": "All your installed games in one place.",
     "redesignWelcome": {
       "title": "Your Library, Redesigned",
       "subtitle": "Ascendara has had a full library makeover. Here's what's new:",
@@ -1889,6 +1891,26 @@
       "subtitle": "Games you've saved to download later",
       "title": "Play Later"
     },
+    "favoritesGallery": {
+      "title": "Favorites",
+      "subtitle": "Your favorite games, rated and organized by you.",
+      "allGames": "All Games",
+      "sortBy": "Sort by",
+      "noRating": "Unrated",
+      "empty": "No favorites yet",
+      "emptyHint": "Hover over a game and click the heart icon to add it here.",
+      "removeFromFavorites": "Remove from favorites",
+      "ratingDisclaimer": {
+        "title": "Personal Rating",
+        "description": "This rating is stored locally on your device only. It's purely personal and is never shared, posted, or submitted anywhere."
+      },
+      "sort": {
+        "highestRating": "Highest Rating",
+        "mostPlayed": "Most Played",
+        "recentlyPlayed": "Recently Played",
+        "recentlyAdded": "Recently Added"
+      }
+    },
     "playTime": "Play Time",
     "rateGame": {
       "commentPlaceholder": "e.g., I had a good time playing but...",
@@ -1905,7 +1927,7 @@
       "ratingLabel": "Your Rating",
       "success": "Rating Submitted",
       "successDesc": "Thank you for rating {{game}}!",
-      "title": "Rate {{game}}",
+      "title": "Review and Rate {{game}}",
       "veryGood": "Really enjoyed it"
     },
     "removeFavorite": "Remove from Favorites",
