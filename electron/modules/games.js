@@ -140,7 +140,8 @@ function registerGameHandlers() {
               const gameInfoPath = path.join(downloadDir, dir, `${dir}.ascendara.json`);
               try {
                 const gameInfoData = await fs.promises.readFile(gameInfoPath, "utf8");
-                return JSON.parse(gameInfoData);
+                const parsed = JSON.parse(gameInfoData);
+                return { ...parsed, _sourceDir: downloadDir };
               } catch (error) {
                 const errorKey = `${dir}_${error.code}`;
                 if (shouldLogError(errorKey)) {
@@ -201,7 +202,7 @@ function registerGameHandlers() {
               }
             }
 
-            return { ...game, imagePath };
+            return { ...game, imagePath, _sourceDir: dir };
           });
 
           allGames.push(...gamesWithImagePaths);

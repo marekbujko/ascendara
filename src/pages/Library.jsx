@@ -51,6 +51,9 @@ import {
   Sparkles,
   MessageSquareText,
   TriangleAlert,
+  Layers,
+  Timer,
+  HardDriveDownload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -185,6 +188,8 @@ const Library = () => {
   const [isCalculatingValue, setIsCalculatingValue] = useState(false);
   const [valueProgress, setValueProgress] = useState({ current: 0, total: 0, game: "" });
   const [activeTab, setActiveTab] = useState("all"); // "all" | "favorites" | "cloud" | "playLater"
+  const [groupBy, setGroupBy] = useState(() => localStorage.getItem("library-groupBy") || "none"); // "none" | "directory"
+  const [sortMode, setSortMode] = useState(() => localStorage.getItem("library-sortMode") || "alpha"); // "alpha" | "playtime"
   const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
@@ -312,16 +317,30 @@ const Library = () => {
       if (aFavorite !== bFavorite) {
         return aFavorite ? -1 : 1;
       }
+      // Sort mode
+      if (sortMode === "playtime") {
+        const aTime = a.playTime || 0;
+        const bTime = b.playTime || 0;
+        return bTime - aTime;
+      }
       // Alphabetical
       return sortOrder === "asc"
         ? aName.localeCompare(bName)
         : bName.localeCompare(aName);
     });
 
-  // Save sortOrder to localStorage whenever it changes
+  // Save sortOrder/groupBy/sortMode to localStorage whenever they change
   useEffect(() => {
     safeSetItem("library-sortOrder", sortOrder);
   }, [sortOrder]);
+
+  useEffect(() => {
+    safeSetItem("library-groupBy", groupBy);
+  }, [groupBy]);
+
+  useEffect(() => {
+    safeSetItem("library-sortMode", sortMode);
+  }, [sortMode]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredGames.length / PAGE_SIZE);
@@ -1469,14 +1488,28 @@ const Library = () => {
                   <SortAscIcon className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => setSortOrder("asc")} className={cn("cursor-pointer", sortOrder === "asc" && "bg-accent/50")}>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onClick={() => { setSortOrder("asc"); setSortMode("alpha"); }} className={cn("cursor-pointer", sortMode === "alpha" && sortOrder === "asc" && "bg-accent/50")}>
                   <ArrowUpAZ className="mr-2 h-4 w-4" />
                   {t("library.sort.aToZ")}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSortOrder("desc")} className={cn("cursor-pointer", sortOrder === "desc" && "bg-accent/50")}>
+                <DropdownMenuItem onClick={() => { setSortOrder("desc"); setSortMode("alpha"); }} className={cn("cursor-pointer", sortMode === "alpha" && sortOrder === "desc" && "bg-accent/50")}>
                   <ArrowDownAZ className="mr-2 h-4 w-4" />
                   {t("library.sort.zToA")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortMode("playtime")} className={cn("cursor-pointer", sortMode === "playtime" && "bg-accent/50")}>
+                  <Timer className="mr-2 h-4 w-4" />
+                  {t("library.sort.mostPlayed")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{t("library.sort.groupBy")}</p>
+                <DropdownMenuItem onClick={() => setGroupBy("none")} className={cn("cursor-pointer", groupBy === "none" && "bg-accent/50")}>
+                  <SquareLibrary className="mr-2 h-4 w-4" />
+                  {t("library.sort.groupNone")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setGroupBy("directory")} className={cn("cursor-pointer", groupBy === "directory" && "bg-accent/50")}>
+                  <HardDriveDownload className="mr-2 h-4 w-4" />
+                  {t("library.sort.groupByDirectory")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuCheckboxItem className="cursor-pointer" checked={filters.vrOnly} onCheckedChange={checked => setFilters(prev => ({ ...prev, vrOnly: checked }))}>
@@ -1487,7 +1520,7 @@ const Library = () => {
                   {t("library.filters.vrGames")}
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem className="cursor-pointer" checked={filters.onlineGames} onCheckedChange={checked => setFilters(prev => ({ ...prev, onlineGames: checked }))}>
-                  <ExternalLink className="mr-2 h-4 w-4" />
+                  <Gamepad2 className="mr-2 h-4 w-4" />
                   {t("library.filters.onlineGames")}
                 </DropdownMenuCheckboxItem>
               </DropdownMenuContent>
@@ -1529,85 +1562,128 @@ const Library = () => {
         {/* Scrollable game grid */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {/* ── All Games / Favorites tab ── */}
-          {(activeTab === "all" || activeTab === "favorites") && (
-            <>
-              <DndProvider backend={HTML5Backend}>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {tabPaginatedGames
-                    .sort((a, b) => (a.isFolder === b.isFolder ? 0 : a.isFolder ? -1 : 1))
-                    .map(game => (
-                      <div key={game.game || game.name}>
-                        {game.isFolder ? (
-                          <DroppableFolderCard
-                            folder={game}
-                            onDropGame={droppedGame => {
-                              addGameToFolder(droppedGame, game.game);
-                              const updatedFolders = loadFolders();
-                              const updatedFolder = updatedFolders.find(f => f.game === game.game);
-                              setFolders(updatedFolders);
-                              setGames(prevGames =>
-                                prevGames
-                                  .map(g => {
-                                    if (g.isFolder && g.game === game.game) return { ...updatedFolder };
-                                    return g;
-                                  })
-                                  .filter(g =>
-                                    (g.game || g.name) !== (droppedGame.game || droppedGame.name) ||
-                                    (g.isFolder && g.game === game.game)
-                                  )
-                              );
-                            }}
-                          >
-                            <FolderCard
-                              key={game.game + "-" + (game.items ? game.items.length : 0)}
-                              name={game.game || game.name}
-                              folder={game}
-                              refreshKey={game.items ? game.items.length : 0}
-                            />
-                          </DroppableFolderCard>
-                        ) : (
-                          <DraggableGameCard game={game}>
-                            <InstalledGameCard
-                              game={game}
-                              onPlay={() => selectionMode ? handleSelectGame(game) : handlePlayGame(game)}
-                              favorites={favorites}
-                              onToggleFavorite={() => toggleFavorite(game.game || game.name)}
-                              selectionMode={selectionMode}
-                              isSelected={selectedGames.includes(game.game)}
-                              onSelectCheckbox={() => handleSelectGame(game)}
-                              updateInfo={game.gameID ? gameUpdates[game.gameID] : null}
-                            />
-                          </DraggableGameCard>
-                        )}
+          {(activeTab === "all" || activeTab === "favorites") && (() => {
+            const renderGameCard = game => (
+              <div key={game.game || game.name}>
+                {game.isFolder ? (
+                  <DroppableFolderCard
+                    folder={game}
+                    onDropGame={droppedGame => {
+                      addGameToFolder(droppedGame, game.game);
+                      const updatedFolders = loadFolders();
+                      const updatedFolder = updatedFolders.find(f => f.game === game.game);
+                      setFolders(updatedFolders);
+                      setGames(prevGames =>
+                        prevGames
+                          .map(g => {
+                            if (g.isFolder && g.game === game.game) return { ...updatedFolder };
+                            return g;
+                          })
+                          .filter(g =>
+                            (g.game || g.name) !== (droppedGame.game || droppedGame.name) ||
+                            (g.isFolder && g.game === game.game)
+                          )
+                      );
+                    }}
+                  >
+                    <FolderCard
+                      key={game.game + "-" + (game.items ? game.items.length : 0)}
+                      name={game.game || game.name}
+                      folder={game}
+                      refreshKey={game.items ? game.items.length : 0}
+                    />
+                  </DroppableFolderCard>
+                ) : (
+                  <DraggableGameCard game={game}>
+                    <InstalledGameCard
+                      game={game}
+                      onPlay={() => selectionMode ? handleSelectGame(game) : handlePlayGame(game)}
+                      favorites={favorites}
+                      onToggleFavorite={() => toggleFavorite(game.game || game.name)}
+                      selectionMode={selectionMode}
+                      isSelected={selectedGames.includes(game.game)}
+                      onSelectCheckbox={() => handleSelectGame(game)}
+                      updateInfo={game.gameID ? gameUpdates[game.gameID] : null}
+                    />
+                  </DraggableGameCard>
+                )}
+              </div>
+            );
+
+            const gridClass = "grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
+
+            if (groupBy === "directory") {
+              // Build directory groups from all filtered games (not paginated) so each section is complete
+              const dirGroups = new Map();
+              tabGames.forEach(game => {
+                const dir = game._sourceDir || t("library.sort.addedGames");
+                if (!dirGroups.has(dir)) dirGroups.set(dir, []);
+                dirGroups.get(dir).push(game);
+              });
+
+              return (
+                <DndProvider backend={HTML5Backend}>
+                  {dirGroups.size === 0 && (
+                    <div className="flex flex-col items-center justify-center py-24 text-center">
+                      <SquareLibrary className="mb-4 h-12 w-12 text-muted-foreground/30" />
+                      <p className="text-sm text-muted-foreground">{t("library.noGamesFound")}</p>
+                    </div>
+                  )}
+                  {[...dirGroups.entries()].map(([dir, dirGames]) => {
+                    const label = dir.split(/[\\/]/).pop() || dir;
+                    return (
+                      <div key={dir} className="mb-8">
+                        <div className="mb-3 flex items-center gap-2">
+                          <HardDriveDownload className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+                          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/70" title={dir}>{label}</span>
+                          <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">{dirGames.length}</span>
+                          <div className="ml-1 flex-1 border-t border-border/30" />
+                        </div>
+                        <div className={gridClass}>
+                          {dirGames.sort((a, b) => (a.isFolder === b.isFolder ? 0 : a.isFolder ? -1 : 1)).map(renderGameCard)}
+                        </div>
                       </div>
-                    ))}
-                </div>
-              </DndProvider>
+                    );
+                  })}
+                </DndProvider>
+              );
+            }
 
-              {tabPaginatedGames.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-24 text-center">
-                  <SquareLibrary className="mb-4 h-12 w-12 text-muted-foreground/30" />
-                  <p className="text-sm text-muted-foreground">
-                    {activeTab === "favorites" ? (t("library.filters.favorites.empty")) : t("library.noGamesFound") || "No games found"}
-                  </p>
-                </div>
-              )}
+            return (
+              <>
+                <DndProvider backend={HTML5Backend}>
+                  <div className={gridClass}>
+                    {tabPaginatedGames
+                      .sort((a, b) => (a.isFolder === b.isFolder ? 0 : a.isFolder ? -1 : 1))
+                      .map(renderGameCard)}
+                  </div>
+                </DndProvider>
 
-              {tabTotalPages > 1 && (
-                <div className="mt-6 flex items-center justify-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
-                    {t("common.prev")}
-                  </Button>
-                  <span className="px-3 text-sm text-muted-foreground">
-                    {t("common.page")} {currentPage} / {tabTotalPages}
-                  </span>
-                  <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(tabTotalPages, p + 1))} disabled={currentPage === tabTotalPages}>
-                    {t("common.next")}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
+                {tabPaginatedGames.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-24 text-center">
+                    <SquareLibrary className="mb-4 h-12 w-12 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">
+                      {activeTab === "favorites" ? (t("library.filters.favorites.empty")) : t("library.noGamesFound") || "No games found"}
+                    </p>
+                  </div>
+                )}
+
+                {tabTotalPages > 1 && (
+                  <div className="mt-6 flex items-center justify-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                      {t("common.prev")}
+                    </Button>
+                    <span className="px-3 text-sm text-muted-foreground">
+                      {t("common.page")} {currentPage} / {tabTotalPages}
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(tabTotalPages, p + 1))} disabled={currentPage === tabTotalPages}>
+                      {t("common.next")}
+                    </Button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* ── Cloud Library tab ── */}
           {activeTab === "cloud" && (

@@ -1920,7 +1920,12 @@
     "size": "Size",
     "sort": {
       "aToZ": "Sort A to Z",
-      "zToA": "Sort Z to A"
+      "zToA": "Sort Z to A",
+      "mostPlayed": "Most Played",
+      "groupBy": "Group By",
+      "groupNone": "No Grouping",
+      "groupByDirectory": "Directory",
+      "addedGames": "Added Games"
     },
     "spaceTooltip": {
       "games": "Space used by Ascendara games: {{size}}",
