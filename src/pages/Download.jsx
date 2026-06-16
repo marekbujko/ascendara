@@ -71,6 +71,7 @@ import {
   ShieldCheck,
   Trophy,
   Library,
+  Heart,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -339,7 +340,14 @@ export default function DownloadPage() {
   const [nexusGameData, setNexusGameData] = useState(null);
   const [supportsFlingTrainer, setSupportsFlingTrainer] = useState(false);
   const [flingTrainerData, setFlingTrainerData] = useState(null);
-  const [isPlayLater, setIsPlayLater] = useState(false);
+  const [isPlayLater, setIsPlayLater] = useState(() => {
+    const list = JSON.parse(localStorage.getItem("play-later-games") || "[]");
+    return list.some(g => g.game === state?.gameData?.game);
+  });
+  const [isFavorite, setIsFavorite] = useState(() => {
+    const favs = JSON.parse(localStorage.getItem("game-favorites") || "[]");
+    return favs.includes(state?.gameData?.game);
+  });
   const [isIndexOutdated, setIsIndexOutdated] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(null);
   const [isVerified, setIsVerified] = useState(false);
@@ -350,6 +358,17 @@ export default function DownloadPage() {
   const [isGameInstalled, setIsGameInstalled] = useState(false);
   const [showReinstallWarning, setShowReinstallWarning] = useState(false);
   const [pendingReinstallUrl, setPendingReinstallUrl] = useState(null);
+
+  // Sync isFavorite when changed from elsewhere (e.g. Library favorites tab)
+  useEffect(() => {
+    if (!gameData?.game) return;
+    const sync = () => {
+      const favs = JSON.parse(localStorage.getItem("game-favorites") || "[]");
+      setIsFavorite(favs.includes(gameData.game));
+    };
+    window.addEventListener("favorites-updated", sync);
+    return () => window.removeEventListener("favorites-updated", sync);
+  }, [gameData?.game]);
 
   // Load antivirus warning dismissed state from localStorage
   useEffect(() => {
@@ -2073,7 +2092,80 @@ export default function DownloadPage() {
                       </div>
                     </div>
 
-                    {/* Report Button */}
+                    {/* Action Buttons: Favorite + Play Later + Report */}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`px-2.5 transition-all duration-200 ${isFavorite ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:text-foreground"}`}
+                              onClick={() => {
+                                const favs = JSON.parse(localStorage.getItem("game-favorites") || "[]");
+                                const meta = JSON.parse(localStorage.getItem("game-favorites-meta") || "{}");
+                                let updated;
+                                if (isFavorite) {
+                                  updated = favs.filter(n => n !== gameData.game);
+                                  delete meta[gameData.game];
+                                } else {
+                                  updated = [...favs, gameData.game];
+                                  meta[gameData.game] = { imgID: gameData.imgID || null, gameID: gameData.gameID || null };
+                                }
+                                localStorage.setItem("game-favorites", JSON.stringify(updated));
+                                localStorage.setItem("game-favorites-meta", JSON.stringify(meta));
+                                setIsFavorite(!isFavorite);
+                                window.dispatchEvent(new CustomEvent("favorites-updated"));
+                              }}
+                            >
+                              <Heart className={`h-4 w-4 ${isFavorite ? "fill-primary" : ""}`} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-secondary">{isFavorite ? (t("library.favoritesGallery.removeFromFavorites") || "Remove from favorites") : (t("library.filters.favorites.label") || "Add to favorites")}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`px-2.5 transition-all duration-200 ${isPlayLater ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:text-foreground"}`}
+                              onClick={() => {
+                                const list = JSON.parse(localStorage.getItem("play-later-games") || "[]");
+                                if (isPlayLater) {
+                                  const updated = list.filter(g => g.game !== gameData.game);
+                                  localStorage.setItem("play-later-games", JSON.stringify(updated));
+                                  setIsPlayLater(false);
+                                } else {
+                                  list.push({
+                                    game: gameData.game,
+                                    gameID: gameData.gameID,
+                                    imgID: gameData.imgID,
+                                    version: gameData.version,
+                                    size: gameData.size,
+                                    category: gameData.category,
+                                    dlc: gameData.dlc,
+                                    online: gameData.online,
+                                    download_links: gameData.download_links,
+                                    desc: gameData.desc,
+                                    addedAt: Date.now(),
+                                  });
+                                  localStorage.setItem("play-later-games", JSON.stringify(list));
+                                  setIsPlayLater(true);
+                                }
+                                window.dispatchEvent(new CustomEvent("play-later-updated"));
+                              }}
+                            >
+                              {isPlayLater ? <Check className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-secondary">{isPlayLater ? (t("gameCard.addedToPlayLater") || "Added to Play Later") : (t("gameCard.playLater") || "Play Later")}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+
                     {settings.gameSource !== "fitgirl" && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
@@ -2177,6 +2269,7 @@ export default function DownloadPage() {
                         </AlertDialogContent>
                       </AlertDialog>
                     )}
+                  </div>
                   </div>
 
                   {/* Game Details Row */}
@@ -3861,19 +3954,3 @@ export default function DownloadPage() {
     </div>
   );
 }
-
-<style jsx>{`
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-  }
-
-  .animate-pulse {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-`}</style>;

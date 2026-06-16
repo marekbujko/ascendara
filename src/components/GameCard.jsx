@@ -20,6 +20,7 @@ import {
   Trophy,
   Star,
   ShieldCheck,
+  Heart,
 } from "lucide-react";
 import {
   TooltipProvider,
@@ -55,6 +56,7 @@ const GameCard = memo(function GameCard({ game, compact }) {
   const [showAllTags, setShowAllTags] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isPlayLater, setIsPlayLater] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
   const cardRef = useRef(null);
   const { cachedImage, loading, error } = useImageLoader(game?.imgID, {
     quality: isVisible ? "high" : "low",
@@ -80,6 +82,15 @@ const GameCard = memo(function GameCard({ game, compact }) {
     const playLaterGames = JSON.parse(localStorage.getItem("play-later-games") || "[]");
     const isInList = playLaterGames.some(g => g.game === game.game);
     setIsPlayLater(isInList);
+    const favorites = JSON.parse(localStorage.getItem("game-favorites") || "[]");
+    setIsFavorite(favorites.includes(game.game));
+
+    const syncFavorite = () => {
+      const favs = JSON.parse(localStorage.getItem("game-favorites") || "[]");
+      setIsFavorite(favs.includes(game.game));
+    };
+    window.addEventListener("favorites-updated", syncFavorite);
+    return () => window.removeEventListener("favorites-updated", syncFavorite);
   }, [game?.game]);
 
   // Setup intersection observer for lazy loading
@@ -226,6 +237,28 @@ const GameCard = memo(function GameCard({ game, compact }) {
       });
     },
     [navigate, game, isInstalled, needsUpdate, t]
+  );
+
+  // Handle Favorite Click
+  const handleFavorite = useCallback(
+    e => {
+      e.stopPropagation();
+      const favorites = JSON.parse(localStorage.getItem("game-favorites") || "[]");
+      const meta = JSON.parse(localStorage.getItem("game-favorites-meta") || "{}");
+      let updated;
+      if (isFavorite) {
+        updated = favorites.filter(name => name !== game.game);
+        delete meta[game.game];
+      } else {
+        updated = [...favorites, game.game];
+        meta[game.game] = { imgID: game.imgID || null, gameID: game.gameID || null };
+      }
+      localStorage.setItem("game-favorites", JSON.stringify(updated));
+      localStorage.setItem("game-favorites-meta", JSON.stringify(meta));
+      setIsFavorite(!isFavorite);
+      window.dispatchEvent(new CustomEvent("favorites-updated"));
+    },
+    [game, isFavorite]
   );
 
   // Handle Play Later Click
@@ -492,28 +525,36 @@ const GameCard = memo(function GameCard({ game, compact }) {
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-2 border-t p-4">
-          {/* Play Later Button */}
+          {/* Play Later + Favorite Buttons */}
           {!isInstalled && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`w-full gap-2 transition-all duration-200 ${isPlayLater ? "text-primary hover:bg-primary/5" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={handlePlayLater}
-            >
-              {isPlayLater ? (
-                <>
-                  <Check className="h-3.5 w-3.5" />
-                  <span className="text-xs font-medium">
-                    {t("gameCard.addedToPlayLater")}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Clock className="h-3.5 w-3.5" />
-                  <span className="text-xs font-medium">{t("gameCard.playLater")}</span>
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`flex-1 gap-2 transition-all duration-200 ${isPlayLater ? "text-primary hover:bg-primary/5" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={handlePlayLater}
+              >
+                {isPlayLater ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">{t("gameCard.addedToPlayLater")}</span>
+                  </>
+                ) : (
+                  <>
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">{t("gameCard.playLater")}</span>
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`shrink-0 px-2.5 transition-all duration-200 ${isFavorite ? "text-primary hover:bg-primary/5" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={handleFavorite}
+              >
+                <Heart className={`h-3.5 w-3.5 ${isFavorite ? "fill-primary" : ""}`} />
+              </Button>
+            </div>
           )}
           {(() => {
             // Determine button state and provider
