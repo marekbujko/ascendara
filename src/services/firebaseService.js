@@ -946,7 +946,20 @@ export const syncCloudLibrary = async games => {
       }
     });
 
-    const mergedGames = Array.from(mergedGamesMap.values());
+    // Firestore rejects undefined values – strip them from every game object
+    const stripUndefined = obj => {
+      if (Array.isArray(obj)) return obj.map(stripUndefined);
+      if (obj !== null && typeof obj === "object") {
+        return Object.fromEntries(
+          Object.entries(obj)
+            .filter(([, v]) => v !== undefined)
+            .map(([k, v]) => [k, stripUndefined(v)])
+        );
+      }
+      return obj;
+    };
+
+    const mergedGames = Array.from(mergedGamesMap.values()).map(stripUndefined);
 
     // Calculate achievement totals
     const gamesWithAchievements = mergedGames.filter(g => g.achievementStats);
