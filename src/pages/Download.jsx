@@ -70,6 +70,7 @@ import {
   ListEnd,
   ShieldCheck,
   Trophy,
+  Library,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -88,6 +89,7 @@ import nexusModsService from "@/services/nexusModsService";
 import flingTrainerService from "@/services/flingTrainerService";
 import verifiedGamesService from "@/services/verifiedGamesService";
 import gameService from "@/services/gameService";
+import installedGamesService from "@/services/installedGamesService";
 import {
   SEAMLESS_PROVIDERS,
   VERIFIED_PROVIDERS as CENTRAL_VERIFIED_PROVIDERS,
@@ -345,6 +347,9 @@ export default function DownloadPage() {
   const [torboxDisabledForSession, setTorboxDisabledForSession] = useState(false);
   const [isExternalSourcesMode, setIsExternalSourcesMode] = useState(false);
   const [antivirusWarningDismissed, setAntivirusWarningDismissed] = useState(false);
+  const [isGameInstalled, setIsGameInstalled] = useState(false);
+  const [showReinstallWarning, setShowReinstallWarning] = useState(false);
+  const [pendingReinstallUrl, setPendingReinstallUrl] = useState(null);
 
   // Load antivirus warning dismissed state from localStorage
   useEffect(() => {
@@ -353,6 +358,14 @@ export default function DownloadPage() {
       setAntivirusWarningDismissed(true);
     }
   }, []);
+
+  // Check if game is already installed
+  useEffect(() => {
+    if (!gameData?.game) return;
+    installedGamesService.checkGameStatus(gameData.game, gameData.version).then(({ isInstalled, needsUpdate }) => {
+      setIsGameInstalled(isInstalled && !needsUpdate && !gameData.isUpdating);
+    });
+  }, [gameData?.game, gameData?.version, gameData?.isUpdating]);
 
   // Fetch rating from new API when using local index
   useEffect(() => {
@@ -563,6 +576,13 @@ export default function DownloadPage() {
     if (gameData.isUpdating) {
       // Handle update flow
       setShowUpdatePrompt(true);
+      return;
+    }
+
+    // Warn if game is already installed
+    if (isGameInstalled) {
+      setPendingReinstallUrl(directUrl);
+      setShowReinstallWarning(true);
       return;
     }
 
@@ -1740,6 +1760,50 @@ export default function DownloadPage() {
       style={{ transform: `scale(0.95)`, transformOrigin: "top center" }}
       ref={mainContentRef}
     >
+      <AlertDialog open={showReinstallWarning} onOpenChange={setShowReinstallWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-yellow-500" />
+              {t("download.reinstallWarning.title") || "Game Already Installed"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              {t("download.reinstallWarning.desc") || "This game is already installed in your library. Reinstalling may cause issues such as overwriting save data or corrupting existing files. Are you sure you want to continue?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowReinstallWarning(false)}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <Button
+              className="text-foreground"
+              onClick={() => {
+                setShowReinstallWarning(false);
+                navigate("/library");
+              }}
+            >
+              <Library className="mr-2 h-4 w-4" />
+              {t("download.goToLibrary") || "Go to Library"}
+            </Button>
+            <Button
+              variant="destructive"
+              className="text-foreground"
+              onClick={() => {
+                setShowReinstallWarning(false);
+                setIsGameInstalled(false);
+                if (settings.additionalDirectories && settings.additionalDirectories.length > 0) {
+                  setShowSelectPath(true);
+                } else {
+                  handleDownload(pendingReinstallUrl, 0);
+                }
+              }}
+            >
+              {t("download.reinstallWarning.continueAnyway") || "Reinstall Anyway"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={showNoDownloadPath} onOpenChange={setShowNoDownloadPath}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1774,6 +1838,25 @@ export default function DownloadPage() {
         >
           {t("download.pressEscToGoBack")}
         </div>
+
+        {isGameInstalled && (
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm">
+            <div className="flex items-center gap-2 text-primary">
+              <Library className="h-4 w-4 shrink-0" />
+              <span className="font-medium">
+                {t("download.alreadyInstalled") || "You already have this game installed in your library."}
+              </span>
+            </div>
+            <Button
+              size="sm"
+              className="shrink-0"
+              onClick={() => navigate("/library")}
+            >
+              <Library className="mr-2 h-3 w-3" />
+              {t("download.goToLibrary") || "Go to Library"}
+            </Button>
+          </div>
+        )}
 
         {isIndexOutdated && settings.usingLocalIndex && (
           <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm">
