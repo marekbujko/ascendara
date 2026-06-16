@@ -173,35 +173,46 @@ function registerGameHandlers() {
     try {
       if (!settings.downloadDirectory) return [];
 
-      const gamesFilePath = path.join(settings.downloadDirectory, "games.json");
-      const gamesDirectory = path.join(settings.downloadDirectory, "games");
+      const allDirectories = [
+        settings.downloadDirectory,
+        ...(settings.additionalDirectories || []),
+      ].filter(Boolean);
 
-      try {
-        const gamesData = JSON.parse(fs.readFileSync(gamesFilePath, "utf8"));
+      const allGames = [];
+      for (const dir of allDirectories) {
+        const gamesFilePath = path.join(dir, "games.json");
+        const gamesDirectory = path.join(dir, "games");
 
-        const gamesWithImagePaths = gamesData.games.map(game => {
-          const possibleExtensions = [".jpg", ".jpeg", ".png"];
-          let imagePath = null;
+        try {
+          const gamesData = JSON.parse(fs.readFileSync(gamesFilePath, "utf8"));
 
-          for (const ext of possibleExtensions) {
-            const potentialPath = path.join(
-              gamesDirectory,
-              `${game.game}.ascendara${ext}`
-            );
-            if (fs.existsSync(potentialPath)) {
-              imagePath = potentialPath;
-              break;
+          const gamesWithImagePaths = gamesData.games.map(game => {
+            const possibleExtensions = [".jpg", ".jpeg", ".png"];
+            let imagePath = null;
+
+            for (const ext of possibleExtensions) {
+              const potentialPath = path.join(
+                gamesDirectory,
+                `${game.game}.ascendara${ext}`
+              );
+              if (fs.existsSync(potentialPath)) {
+                imagePath = potentialPath;
+                break;
+              }
             }
+
+            return { ...game, imagePath };
+          });
+
+          allGames.push(...gamesWithImagePaths);
+        } catch (error) {
+          if (error.code !== "ENOENT") {
+            console.error(`Error reading custom games from ${dir}:`, error);
           }
-
-          return { ...game, imagePath };
-        });
-
-        return gamesWithImagePaths;
-      } catch (error) {
-        if (error.code === "ENOENT") return [];
-        throw error;
+        }
       }
+
+      return allGames;
     } catch (error) {
       console.error("Error reading the settings file:", error);
       return [];

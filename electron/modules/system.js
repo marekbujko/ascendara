@@ -4,6 +4,7 @@
  */
 
 const fs = require("fs-extra");
+const nativeFs = require("fs");
 const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
@@ -39,7 +40,7 @@ const gamesSizeCache = {
  */
 async function getDiskSpace(directory) {
   return new Promise((resolve, reject) => {
-    fs.statfs(directory, (err, stats) => {
+    nativeFs.statfs(directory, (err, stats) => {
       if (err) {
         reject(err);
       } else {
@@ -58,12 +59,12 @@ async function getDiskSpace(directory) {
 async function getDirectorySize(directoryPath) {
   let totalSize = 0;
   try {
-    const files = await fs.readdir(directoryPath);
+    const files = await nativeFs.promises.readdir(directoryPath);
 
     for (const file of files) {
       const filePath = path.join(directoryPath, file);
       // use lstat instead of stat to NOT follow symlinks
-      const stats = await fs.lstat(filePath);
+      const stats = await nativeFs.promises.lstat(filePath);
 
       if (stats.isSymbolicLink()) {
         continue; // Ignoring symbolic links (like z:)

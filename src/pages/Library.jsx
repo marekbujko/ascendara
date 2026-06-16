@@ -1387,6 +1387,60 @@ const Library = () => {
                   <span>{isCalculatingSize ? "…" : formatBytes(totalGamesSize)} games</span>
                   <span>{formatBytes(storageInfo.totalSpace)}</span>
                 </div>
+
+                {/* Multiple directories breakdown */}
+                {storageInfo.directories && storageInfo.directories.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setShowStorageDetails(prev => !prev)}
+                      className="mt-1 flex w-full items-center justify-center gap-1 rounded-md py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                    >
+                      {showStorageDetails ? "Hide details" : "Show details"}
+                      <svg
+                        className={cn("h-3 w-3 transition-transform", showStorageDetails && "rotate-180")}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                      </svg>
+                    </button>
+
+                    {showStorageDetails && (
+                      <div className="mt-2 space-y-2 border-t border-border/40 pt-2">
+                        {storageInfo.directories.map((dir, idx) => {
+                          const usedPct = Math.min((dir.usedSpace / dir.totalSpace) * 100, 100);
+                          const gamesPct = Math.min(((dir.gamesSize || 0) / dir.totalSpace) * 100, 100);
+                          const label = dir.path.split(/[\\/]/).pop() || dir.path;
+                          return (
+                            <div key={dir.path || idx} className="space-y-1">
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="max-w-[7rem] truncate font-medium text-foreground/80" title={dir.path}>
+                                  {label}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  {formatBytes(dir.freeSpace)} free
+                                </span>
+                              </div>
+                              <div className="relative h-1 overflow-hidden rounded-full bg-muted/50">
+                                <div
+                                  className="absolute left-0 top-0 h-full rounded-full bg-primary/70"
+                                  style={{ width: `${gamesPct}%`, zIndex: 2 }}
+                                  title={`Games: ${formatBytes(dir.gamesSize || 0)}`}
+                                />
+                                <div
+                                  className="absolute left-0 top-0 h-full rounded-full bg-muted-foreground/20"
+                                  style={{ width: `${usedPct}%`, zIndex: 1 }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             )}
           </div>
