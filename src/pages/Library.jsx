@@ -1740,7 +1740,7 @@ const Library = () => {
         </div>
 
         {/* Scrollable game grid */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-6 pt-5 pb-28">
           {/* ── Tab page header ── */}
           {activeTab !== "favoritesGallery" && (() => {
             const tabMeta = {
@@ -3659,26 +3659,27 @@ const CloudOnlyGameCard = memo(({ game, imageData, onRestore, isRestoring }) => 
           </span>
         </div>
       </CardContent>
-      <CardFooter className="flex flex-col items-start gap-2 px-3 py-2">
+      <CardFooter className="flex flex-col items-start gap-1.5 px-3 py-2">
         <div className="flex w-full items-center gap-1.5">
           <h3 className="flex-1 truncate text-sm font-semibold leading-tight text-foreground">
             {game.name}
           </h3>
-          {game.online && <Gamepad2 className="h-3.5 w-3.5 text-muted-foreground" />}
-          {game.dlc && <Gift className="h-3.5 w-3.5 text-muted-foreground" />}
+          {game.online && <Gamepad2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+          {game.dlc && <Gift className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         </div>
         <div className="flex w-full items-center gap-1.5 text-xs text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" />
-          <span>{formatPlaytime(game.playTime)}</span>
+          <Clock className="h-3 w-3 shrink-0" />
+          <span className="truncate">{formatPlaytime(game.playTime)}</span>
         </div>
         <Button
+          size="sm"
           onClick={e => {
             e.stopPropagation();
             onRestore?.();
           }}
           disabled={isRestoring}
           className={cn(
-            "w-full gap-2 text-white",
+            "w-full gap-1.5 text-xs text-white",
             isCustomGame
               ? "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
               : "bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
@@ -3686,17 +3687,17 @@ const CloudOnlyGameCard = memo(({ game, imageData, onRestore, isRestoring }) => 
         >
           {isRestoring ? (
             <>
-              <Loader className="h-4 w-4 animate-spin" />
+              <Loader className="h-3.5 w-3.5 animate-spin" />
               {t("library.cloudOnly.restoring")}
             </>
           ) : isCustomGame ? (
             <>
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               {t("library.cloudOnly.restoreCustom")}
             </>
           ) : (
             <>
-              <CloudDownload className="h-4 w-4" />
+              <CloudDownload className="h-3.5 w-3.5" />
               {t("library.cloudOnly.restore")}
             </>
           )}
