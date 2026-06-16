@@ -242,7 +242,7 @@ const Library = () => {
 
   useEffect(() => {
     const checkRedesignDialog = async () => {
-      const alreadyShown = localStorage.getItem("library-redesign-welcome-shown");
+      const alreadyShown = localStorage.getItem("library-welcome-v2-shown");
       if (alreadyShown) return;
       try {
         const hasLaunched = await window.electron.hasLaunched();
@@ -2252,19 +2252,19 @@ const Library = () => {
                 <p className="text-sm text-muted-foreground">
                   {t("library.redesignWelcome.subtitle")}
                 </p>
-                <div className="space-y-2 rounded-lg bg-muted/40 p-3 text-sm">
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-primary">✦</span>
-                    <span className="text-foreground/80"><span className="font-medium text-foreground">{t("library.redesignWelcome.feature1Title")}</span> — {t("library.redesignWelcome.feature1Desc")}</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-primary">✦</span>
-                    <span className="text-foreground/80"><span className="font-medium text-foreground">{t("library.redesignWelcome.feature2Title")}</span> — {t("library.redesignWelcome.feature2Desc")}</span>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 text-primary">✦</span>
-                    <span className="text-foreground/80"><span className="font-medium text-foreground">{t("library.redesignWelcome.feature3Title")}</span> — {t("library.redesignWelcome.feature3Desc")}</span>
-                  </div>
+                <div className="space-y-2.5 rounded-lg bg-muted/40 p-3 text-sm">
+                  {[
+                    { icon: <GripVertical className="h-4 w-4 text-primary" />, title: t("library.redesignWelcome.feature1Title"), desc: t("library.redesignWelcome.feature1Desc") },
+                    { icon: <Heart className="h-4 w-4 text-primary" />, title: t("library.redesignWelcome.feature2Title"), desc: t("library.redesignWelcome.feature2Desc") },
+                    { icon: <Star className="h-4 w-4 text-primary" />, title: t("library.redesignWelcome.feature3Title"), desc: t("library.redesignWelcome.feature3Desc") },
+                    { icon: <ArrowDown className="h-4 w-4 text-primary" />, title: t("library.redesignWelcome.feature4Title"), desc: t("library.redesignWelcome.feature4Desc") },
+                    { icon: <SquareLibrary className="h-4 w-4 text-primary" />, title: t("library.redesignWelcome.feature5Title"), desc: t("library.redesignWelcome.feature5Desc") },
+                  ].map(({ icon, title, desc }) => (
+                    <div key={title} className="flex items-start gap-2.5">
+                      <div className="mt-0.5 shrink-0">{icon}</div>
+                      <span className="text-foreground/80"><span className="font-medium text-foreground">{title}</span> — {desc}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </AlertDialogDescription>
@@ -2272,7 +2272,7 @@ const Library = () => {
           <AlertDialogFooter>
             <AlertDialogAction
               onClick={() => {
-                localStorage.setItem("library-redesign-welcome-shown", "true");
+                localStorage.setItem("library-welcome-v2-shown", "true");
                 setShowRedesignDialog(false);
               }}
             >

@@ -1871,15 +1871,19 @@
     "pageTitle": "Your Library",
     "pageSubtitle": "All your installed games in one place.",
     "redesignWelcome": {
-      "title": "Your Library, Redesigned",
-      "subtitle": "Ascendara has had a full library makeover. Here's what's new:",
-      "feature1Title": "New management sidebar",
-      "feature1Desc": "add games, create folders, sync to cloud, and more — all in one place",
-      "feature2Title": "Complete layout redesign",
-      "feature2Desc": "a cleaner, faster experience with tabs for Favorites, Play Later, and Cloud",
-      "feature3Title": "Easier game info editing",
-      "feature3Desc": "update covers, tags, and details right from the game card",
-      "cta": "Let's go"
+      "title": "What the...",
+      "subtitle": "Welcome to your new Ascendara library. Here's what's changed in your library:",
+      "feature1Title": "Rearrange your sidebar tabs",
+      "feature1Desc": "drag All, Favorites, Cloud, and Play Later into whatever order makes sense for you",
+      "feature2Title": "Favorite games before you install them",
+      "feature2Desc": "tap the heart on any game card or download page to save it to your Favorites",
+      "feature3Title": "Rate your favorites",
+      "feature3Desc": "give games a personal 1 to 5 star rating in your Favorites tab, just for you",
+      "feature4Title": "See downloads in your library",
+      "feature4Desc": "games show up while they're downloading so your library always feels complete",
+      "feature5Title": "Sidebar tools",
+      "feature5Desc": "add games, make folders, back up to cloud and more right from the sidebar",
+      "cta": "Nice, let's go"
     },
     "play": "Play",
     "playLater": {
@@ -1888,7 +1892,7 @@
       "badge": "Later",
       "download": "Download Now",
       "remove": "Remove from Play Later",
-      "subtitle": "Games you've saved to download later",
+      "subtitle": "Games you've saved to play at a later time",
       "title": "Play Later"
     },
     "favoritesGallery": {
