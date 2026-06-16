@@ -1849,7 +1849,7 @@ export default function DownloadPage() {
             </div>
             <Button
               size="sm"
-              className="shrink-0"
+              className="shrink-0 text-secondary"
               onClick={() => navigate("/library")}
             >
               <Library className="mr-2 h-3 w-3" />
