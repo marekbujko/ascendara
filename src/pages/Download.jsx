@@ -652,7 +652,7 @@ export default function DownloadPage() {
     if (hasActive && !forceStart) {
       const isVrGame = gameData.category?.includes("Virtual Reality");
       const downloadData = {
-        url: directUrl || gameData.download_links?.[selectedProvider]?.[0] || "",
+        url: directUrl || inputLink || "",
         gameName: sanitizedGameName,
         online: gameData.online || false,
         dlc: gameData.dlc || false,
@@ -663,7 +663,7 @@ export default function DownloadPage() {
         size: gameData.size || "",
         additionalDirIndex: dir || 0,
         gameID: gameData.gameID || "",
-        directUrl: directUrl,
+        directUrl: null,
         dir: dir,
       };
 
